@@ -15,10 +15,10 @@
 스캔 이미지 (S3) → 기울기 감지 → 각도 보정 → 이미지 업스케일링 → OCR → PDF 생성
 ```
 
-1. **기울기 감지**: Google Vision API로 이미지 기울기 각도 측정
+1. **기울기 감지**: Google Vision API를 사용하는 Lambda 함수로 이미지 기울기 각도 측정
 2. **각도 보정**: AWS Fargate + OpenCV로 이미지 기울기 보정  
 3. **업스케일링**: SageMaker + Real-ESRGAN으로 고해상도 변환
-4. **텍스트 추출**: Google Vision API OCR로 텍스트 검색 기능 추가
+4. **텍스트 추출**: Google Vision API를 사용하는 Lambda 함수로 텍스트 검색 기능 추가
 5. **PDF 생성**: 처리된 이미지들을 하나의 PDF로 병합
 
 ## 아키텍처
@@ -67,7 +67,7 @@ aws secretsmanager create-secret \
 
 ### 3단계: 한글 폰트 준비
 
-`workers/3_finalization/pdf_generator/font/NotoSansKR-Regular.ttf` 위치에 한글 폰트 파일 배치
+`config/NotoSansKR-Regular.ttf` 경로에 한글 폰트 파일(`NotoSansKR-Regular.ttf`)을 배치합니다. 이 폰트 파일은 PDF 생성 Lambda 함수 배포 시 자동으로 포함됩니다.
 
 ### 4단계: 인프라 배포
 
@@ -77,7 +77,7 @@ aws secretsmanager create-secret \
 
 약 5-10분 소요되며 다음 리소스가 생성됩니다:
 - S3 버킷 (입력/임시/출력)
-- Lambda 함수 6개
+- Lambda 함수 7개 (기울기 감지, OCR 함수 분리)
 - SageMaker 서버리스 엔드포인트
 - AWS Fargate 클러스터
 - Step Functions 워크플로우
@@ -122,7 +122,8 @@ scan-to-searchable-pdf/
 ├── run.sh                 # 메인 실행 스크립트
 ├── config/
 │   ├── .env               # 환경 설정
-│   └── .env.example       # 설정 템플릿
+│   ├── .env.example       # 설정 템플릿
+│   └── NotoSansKR-Regular.ttf # 한글 폰트 파일
 ├── scan_images/           # 입력 이미지 위치
 ├── infra/                 # Terraform 인프라 코드
 ├── workers/               # Lambda 함수 코드
@@ -138,10 +139,13 @@ scan-to-searchable-pdf/
 
 | 명령어 | 기능 |
 |--------|------|
-| `./run.sh init` | 프로젝트 초기화 |
-| `./run.sh deploy` | AWS 인프라 배포 |
-| `./run.sh start` | 이미지 처리 시작 |
-| `./run.sh destroy` | 모든 리소스 삭제 |
+| `./run.sh init` | 프로젝트 초기 설정 |
+| `./run.sh deploy` | 클라우드 인프라를 배포 |
+| `./run.sh start` | 이미지 처리 작업을 시작 |
+
+## 리소스 삭제
+
+이 프로젝트의 모든 AWS 리소스는 `aws-nuke` 도구를 사용하여 수동으로 정리해야 합니다. `aws-nuke`는 AWS 계정의 모든 리소스를 안전하게 삭제할 수 있는 강력한 도구이므로, 사용에 각별한 주의가 필요합니다.
 
 ## 문제 해결
 
