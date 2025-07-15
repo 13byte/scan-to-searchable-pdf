@@ -16,6 +16,32 @@ resource "aws_lambda_layer_version" "pdf_dependencies" {
   depends_on = [null_resource.build_pdf_layer]
 }
 
+data "archive_file" "initialize_state" {
+  type        = "zip"
+  source_dir  = "${path.module}/../workers/1_orchestration/initialize_state"
+  output_path = "${path.module}/../dist/initialize_state.zip"
+}
+data "archive_file" "orchestrator" {
+  type        = "zip"
+  source_dir  = "${path.module}/../workers/1_orchestration/orchestrator"
+  output_path = "${path.module}/../dist/orchestrator.zip"
+}
+data "archive_file" "upscaler" {
+  type        = "zip"
+  source_dir  = "${path.module}/../workers/2_image_processing/upscaler"
+  output_path = "${path.module}/../dist/upscaler.zip"
+}
+data "archive_file" "pdf_generator" {
+  type        = "zip"
+  source_dir  = "${path.module}/../workers/3_finalization/pdf_generator"
+  output_path = "${path.module}/../dist/pdf_generator.zip"
+}
+data "archive_file" "summary_generator" {
+  type        = "zip"
+  source_dir  = "${path.module}/../workers/3_finalization/summary_generator"
+  output_path = "${path.module}/../dist/summary_generator.zip"
+}
+
 resource "aws_cloudwatch_log_group" "lambda_logs" {
   for_each = {
     initialize_state  = "initialize_state"
