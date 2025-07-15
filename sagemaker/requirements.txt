@@ -1,0 +1,21 @@
+# SageMaker 컨테이너 의존성 (2025-07-12 기준)
+# 핵심 라이브러리
+boto3>=1.34.100
+Pillow>=10.3.0
+numpy<2.0
+opencv-python-headless>=4.9.0
+
+# PyTorch (CUDA 12.1 호환)
+torch==2.3.1
+torchvision==0.18.1
+
+# FastAPI 서버
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+
+# Real-ESRGAN 관련 (GitHub 직접 설치로 의존성 충돌 해결)
+basicsr @ git+https://github.com/xinntao/BasicSR.git
+realesrgan @ git+https://github.com/xinntao/Real-ESRGAN.git
+numba>=0.59.0
+llvmlite>=0.42.0

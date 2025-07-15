@@ -1,0 +1,27 @@
+{
+  "skew_detection": {
+    "confidence_threshold": 0.6,
+    "minimum_blocks_required": 2,
+    "outlier_detection": {
+      "enabled": true,
+      "std_deviation_multiplier": 2.0
+    },
+    "language_hints": ["ko", "en"],
+    "advanced_ocr_options": {
+      "enable_confidence_score": true,
+      "text_detection_confidence_threshold": 0.7
+    }
+  },
+  "quality_assessment": {
+    "thresholds": {
+      "high_quality": 0.8,
+      "medium_quality": 0.6,
+      "low_quality": 0.3
+    }
+  },
+  "error_handling": {
+    "max_retries": 3,
+    "retry_delay_seconds": 2,
+    "fallback_angle": 0.0
+  }
+}

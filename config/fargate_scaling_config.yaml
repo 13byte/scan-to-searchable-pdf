@@ -1,0 +1,157 @@
+# Dynamic Scaling Configuration for Variable Image Collections
+# Fargate 동적 스케일링 설정 - 가변 이미지 컬렉션 지원
+
+processing:
+  # 동시 처리 이미지 수 (이미지 컬렉션 크기에 따라 동적 조정)
+  max_concurrent_images: 5
+  
+  # 복잡도별 임계값 (파일 크기와 해상도 기반)
+  complexity_thresholds:
+    simple:
+      max_processing_time: 45
+      memory_limit_mb: 512
+      max_file_size_mb: 2
+      max_resolution: 2000000  # 2MP
+    medium:
+      max_processing_time: 90
+      memory_limit_mb: 1024
+      max_file_size_mb: 8
+      max_resolution: 8000000  # 8MP
+    complex:
+      max_processing_time: 180
+      memory_limit_mb: 2048
+      max_file_size_mb: 20
+      max_resolution: 16000000  # 16MP
+  
+  # 메모리 관리 (가변 컬렉션 크기 대응)
+  memory_management:
+    enable_garbage_collection: true
+    gc_frequency_seconds: 20
+    max_memory_usage_percent: 75
+    adaptive_gc_threshold: true  # 컬렉션 크기에 따른 동적 조정
+  
+  # 배치 처리 설정 (동적 장수 대응)
+  batch_processing:
+    enabled: true
+    min_batch_size: 3
+    max_batch_size: 15
+    adaptive_batch_sizing: true  # 총 이미지 수에 따른 자동 조정
+    timeout_seconds: 600
+    
+    # 컬렉션 크기별 배치 전략
+    size_based_strategy:
+      small_collection:  # <= 50 images
+        batch_size: 8
+        max_concurrent_batches: 2
+      medium_collection:  # 51-200 images
+        batch_size: 10
+        max_concurrent_batches: 3
+      large_collection:  # 201-500 images
+        batch_size: 12
+        max_concurrent_batches: 4
+      extra_large_collection:  # > 500 images
+        batch_size: 15
+        max_concurrent_batches: 5
+
+# OpenCV 최적화 설정
+optimization:
+  opencv_threads: 3
+  enable_fast_preprocessing: true
+  enable_intermediate_caching: false
+  
+  # 동적 파일명 패턴 지원
+  file_pattern_support:
+    enable_pattern_detection: true
+    fallback_to_numeric_extraction: true
+    support_date_prefixes: true
+    custom_patterns:
+      - '^(\d{6})\.jpe?g$'           # 기존: 510001.jpg
+      - '^page_(\d+)\.jpe?g$'        # page_001.jpg
+      - '^scan_(\d+)\.jpe?g$'        # scan_001.jpg
+      - '^img_(\d+)\.jpe?g$'         # img_001.jpg
+      - '^\d{8}_(\d+)\.jpe?g$'       # 20240101_001.jpg
+      - '^[a-zA-Z]+_(\d+)\.jpe?g$'   # book_001.jpg
+  
+  # 이미지 품질 향상 설정
+  quality_enhancement:
+    enable_noise_reduction: true
+    enable_contrast_enhancement: true
+    enable_sharpening: true
+    preserve_aspect_ratio: true
+
+# 모니터링 및 로깅
+monitoring:
+  enable_performance_metrics: true
+  log_level: INFO
+  metrics_interval_seconds: 30
+  
+  # 동적 컬렉션 모니터링
+  collection_metrics:
+    track_pattern_distribution: true
+    track_size_distribution: true
+    track_processing_efficiency: true
+    alert_on_anomalies: true
+  
+  # 경고 임계값
+  alerts:
+    high_memory_usage_percent: 80
+    long_processing_time_minutes: 15
+    high_error_rate_percent: 10
+    unusual_file_pattern_count: 5
+
+# 에러 처리 및 복구
+error_handling:
+  max_retry_attempts: 3
+  retry_backoff_multiplier: 2
+  enable_partial_recovery: true
+  
+  # 동적 처리 관련 에러 대응
+  dynamic_processing_errors:
+    unknown_file_pattern:
+      action: "fallback_to_numeric"
+      log_level: "WARNING"
+    duplicate_page_numbers:
+      action: "auto_resolve_with_suffix"
+      log_level: "INFO"
+    missing_page_sequence:
+      action: "continue_with_gaps"
+      log_level: "WARNING"
+    oversized_collection:
+      action: "split_into_chunks"
+      log_level: "INFO"
+      max_chunk_size: 1000
+
+# 리소스 제한
+resource_limits:
+  max_total_processing_time_hours: 6
+  max_memory_per_image_mb: 512
+  max_disk_usage_gb: 10
+  max_concurrent_downloads: 8
+  
+  # 컬렉션 크기별 제한
+  collection_size_limits:
+    max_images_per_collection: 2000
+    max_total_size_gb: 50
+    max_processing_duration_hours: 12
+
+# 성능 튜닝
+performance_tuning:
+  # CPU 사용률 기반 조정
+  cpu_based_scaling:
+    enable: true
+    target_cpu_usage_percent: 70
+    scale_up_threshold: 85
+    scale_down_threshold: 40
+  
+  # I/O 최적화
+  io_optimization:
+    enable_parallel_s3_operations: true
+    s3_transfer_concurrency: 4
+    enable_compression: true
+    compression_level: 6
+  
+  # 캐싱 전략
+  caching:
+    enable_image_metadata_cache: true
+    cache_ttl_minutes: 30
+    max_cache_size_mb: 256

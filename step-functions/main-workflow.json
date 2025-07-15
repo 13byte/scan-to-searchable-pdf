@@ -1,0 +1,199 @@
+{
+  "Comment": "스캔된 책 이미지 처리 및 PDF 생성 워크플로우.",
+  "StartAt": "InitializeState",
+  "States": {
+    "InitializeState": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${initialize_state_lambda_arn}",
+        "Payload": {
+          "run_id.$": "$$.Execution.Name",
+          "input_bucket.$": "$.input_bucket",
+          "input_prefix.$": "$.input_prefix"
+        }
+      },
+      "ResultPath": "$.initialization",
+      "Next": "Orchestrator"
+    },
+    "Orchestrator": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${orchestrator_lambda_arn}",
+        "Payload": {
+          "run_id.$": "$$.Execution.Name",
+          "input_bucket.$": "$.input_bucket",
+          "temp_bucket.$": "$.temp_bucket",
+          "output_bucket.$": "$.output_bucket"
+        }
+      },
+      "ResultPath": "$.orchestrator_output",
+      "Next": "IsWorkDone"
+    },
+    "IsWorkDone": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.orchestrator_output.Payload.is_work_done",
+          "BooleanEquals": true,
+          "Next": "GeneratePDF"
+        }
+      ],
+      "Default": "ProcessBatch"
+    },
+    "ProcessBatch": {
+      "Type": "Map",
+      "ItemsPath": "$.orchestrator_output.Payload.batch_to_process",
+      "MaxConcurrency": 50,
+      "ResultPath": "$.map_results",
+      "Iterator": {
+        "StartAt": "DetectSkew",
+        "States": {
+          "DetectSkew": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+              "FunctionName": "${detect_skew_lambda_arn}",
+              "Payload": {
+                "function_type": "detect_skew",
+                "run_id.$": "$.run_id",
+                "image_key.$": "$.image_key",
+                "input_bucket.$": "$.input_bucket"
+              }
+            },
+            "ResultPath": "$.skew_result",
+            "Next": "CorrectSkew",
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "Next": "MapTaskFailed"
+              }
+            ]
+          },
+          "CorrectSkew": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::ecs:runTask.sync",
+            "Parameters": {
+              "LaunchType": "FARGATE",
+              "TaskDefinition": "${fargate_task_arn}",
+              "Cluster": "${ecs_cluster_arn}",
+              "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                  "Subnets": ["${subnet_id}"],
+                  "SecurityGroups": ["${security_group_id}"],
+                  "AssignPublicIp": "ENABLED"
+                }
+              },
+              "Overrides": {
+                "ContainerOverrides": [{
+                  "Name": "consolidated-processor",
+                  "Environment": [
+                    {"Name": "RUN_ID", "Value.$": "$.run_id"},
+                    {"Name": "IMAGE_KEY", "Value.$": "$.image_key"},
+                    {"Name": "SKEW_ANGLE", "Value.$": "States.Format('{}', $.skew_result.Payload.skew_angle)"},
+                    {"Name": "INPUT_BUCKET", "Value.$": "$.input_bucket"},
+                    {"Name": "TEMP_BUCKET", "Value.$": "$.temp_bucket"},
+                    {"Name": "DYNAMODB_STATE_TABLE", "Value": "${dynamodb_table_name}"}
+                  ]
+                }]
+              }
+            },
+            "ResultPath": "$.correction_result",
+            "Next": "UpscaleImage",
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "Next": "MapTaskFailed"
+              }
+            ]
+          },
+          "UpscaleImage": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+              "FunctionName": "${upscale_image_lambda_arn}",
+              "Payload": {
+                "run_id.$": "$.run_id",
+                "image_key.$": "$.image_key",
+                "temp_bucket.$": "$.temp_bucket",
+                "job_output": {
+                   "skew_correction.$": "$.correction_result.Payload"
+                }
+              }
+            },
+            "ResultPath": "$.upscale_result",
+            "Next": "ProcessOCR",
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "Next": "MapTaskFailed"
+              }
+            ]
+          },
+          "ProcessOCR": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+              "FunctionName": "${process_ocr_lambda_arn}",
+              "Payload": {
+                "function_type": "process_ocr",
+                "run_id.$": "$.run_id",
+                "image_key.$": "$.image_key",
+                "temp_bucket.$": "$.temp_bucket",
+                "image_key_for_ocr.$": "$.upscale_result.Payload.upscaled_image_key"
+              }
+            },
+            "ResultPath": "$.ocr_result",
+            "End": true,
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "Next": "MapTaskFailed"
+              }
+            ]
+          },
+          "MapTaskFailed": {
+            "Type": "Pass",
+            "Result": { "status": "FAILED_IN_MAP" },
+            "End": true
+          }
+        }
+      },
+      "Next": "Wait"
+    },
+    "Wait": {
+      "Type": "Wait",
+      "Seconds": 2,
+      "Next": "Orchestrator"
+    },
+    "GeneratePDF": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${generate_pdf_lambda_arn}",
+        "Payload": {
+          "run_id.$": "$$.Execution.Name",
+          "input_bucket.$": "$.input_bucket",
+          "output_bucket.$": "$.output_bucket",
+          "temp_bucket.$": "$.temp_bucket"
+        }
+      },
+      "ResultPath": "$.pdf_result",
+      "Next": "GenerateRunSummary"
+    },
+    "GenerateRunSummary": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${generate_run_summary_lambda_arn}",
+        "Payload": {
+          "execution_id.$": "$$.Execution.Name",
+          "start_time.$": "$$.Execution.StartTime",
+          "results.$": "$.pdf_result.Payload"
+        }
+      },
+      "End": true
+    }
+  }
+}

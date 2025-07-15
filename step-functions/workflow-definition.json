@@ -1,0 +1,584 @@
+{
+  "Comment": "Performance-Optimized Korean Book Scan Processing Workflow with Dynamic Resource Allocation",
+  "StartAt": "TriggerPipeline",
+  "States": {
+    "TriggerPipeline": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${trigger_pipeline_lambda_arn}",
+        "Payload": {
+          "s3_bucket.$": "$.s3_bucket",
+          "s3_prefix.$": "$.s3_prefix"
+        }
+      },
+      "ResultPath": "$.pipeline_input",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleInitializationFailure",
+          "ResultPath": "$.initialization_error"
+        }
+      ],
+      "Next": "CheckInitializationSuccess"
+    },
+    "CheckInitializationSuccess": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.pipeline_input.StatusCode",
+              "NumericEquals": 200
+            },
+            {
+              "Variable": "$.pipeline_input.Payload.status",
+              "StringEquals": "SUCCESS"
+            }
+          ],
+          "Next": "LoadBatchList"
+        }
+      ],
+      "Default": "HandleInitializationFailure"
+    },
+    "HandleInitializationFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${handle_failure_lambda_arn}",
+        "Payload": {
+          "error_type": "InitializationFailure",
+          "error_details.$": "$.initialization_error",
+          "execution_name.$": "$$.Execution.Name",
+          "state_name": "TriggerPipeline"
+        }
+      },
+      "End": true
+    },
+    "LoadBatchList": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Parameters": {
+        "Bucket.$": "$.pipeline_input.Payload.temp_bucket",
+        "Key.$": "$.pipeline_input.Payload.batch_list_s3_key"
+      },
+      "ResultSelector": {
+        "batch_data.$": "States.StringToJson($.Body)"
+      },
+      "ResultPath": "$.batch_list_data",
+      "Next": "SelectOptimalTaskDefinition"
+    },
+    "SelectOptimalTaskDefinition": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.pipeline_input.Payload.resource_config.cpu",
+          "NumericEquals": 1024,
+          "Next": "PreprocessImagesSmall"
+        },
+        {
+          "Variable": "$.pipeline_input.Payload.resource_config.cpu",
+          "NumericEquals": 2048,
+          "Next": "PreprocessImagesMedium"
+        },
+        {
+          "Variable": "$.pipeline_input.Payload.resource_config.cpu",
+          "NumericEquals": 4096,
+          "Next": "PreprocessImagesLarge"
+        },
+        {
+          "Variable": "$.pipeline_input.Payload.resource_config.cpu",
+          "NumericEquals": 8192,
+          "Next": "PreprocessImagesXLarge"
+        }
+      ],
+      "Default": "PreprocessImagesMedium"
+    },
+    "PreprocessImagesSmall": {
+      "Type": "Map",
+      "ItemsPath": "$.batch_list_data.batch_data.image_batch_s3_keys",
+      "MaxConcurrencyPath": "$.pipeline_input.Payload.max_concurrency",
+      "Parameters": {
+        "batch_key.$": "$",
+        "s3_bucket.$": "$.pipeline_input.Payload.s3_bucket",
+        "temp_bucket.$": "$.pipeline_input.Payload.temp_bucket",
+        "metadata_s3_key.$": "$.pipeline_input.Payload.metadata_s3_key"
+      },
+      "Iterator": {
+        "StartAt": "PrepareSmallFargateParams",
+        "States": {
+          "PrepareSmallFargateParams": {
+            "Type": "Pass",
+            "Parameters": {
+              "Cluster": "${ecs_cluster_arn}",
+              "TaskDefinition": "${ecs_task_definition_small_arn}",
+              "CapacityProviderStrategy": [
+                { "CapacityProvider": "FARGATE_SPOT", "Weight": 3 },
+                { "CapacityProvider": "FARGATE", "Weight": 1 }
+              ],
+              "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                  "Subnets": ${private_subnets_json},
+                  "SecurityGroups": ["${fargate_sg_id}"],
+                  "AssignPublicIp": "DISABLED"
+                }
+              },
+              "Overrides": {
+                "ContainerOverrides": [
+                  {
+                    "Name": "consolidated-processor",
+                    "Environment": [
+                      { "Name": "INPUT_BUCKET", "Value.$": "$.s3_bucket" },
+                      { "Name": "TEMP_BUCKET", "Value.$": "$.temp_bucket" },
+                      { "Name": "GOOGLE_SECRET_NAME", "Value": "${google_secret_name}" },
+                      { "Name": "METADATA_S3_KEY", "Value.$": "$.metadata_s3_key" },
+                      { "Name": "IMAGE_LIST_S3_KEY", "Value.$": "States.JsonToString($)" },
+                      { "Name": "PERFORMANCE_MODE", "Value": "optimized" },
+                      { "Name": "TASK_SIZE", "Value": "small" }
+                    ]
+                  }
+                ]
+              }
+            },
+            "ResultPath": "$.fargate_params",
+            "Next": "RunSmallFargateTask"
+          },
+          "RunSmallFargateTask": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::ecs:runTask.sync",
+            "Parameters": {
+                "Cluster.$": "$.fargate_params.Cluster",
+                "TaskDefinition.$": "$.fargate_params.TaskDefinition",
+                "CapacityProviderStrategy.$": "$.fargate_params.CapacityProviderStrategy",
+                "NetworkConfiguration.$": "$.fargate_params.NetworkConfiguration",
+                "Overrides.$": "$.fargate_params.Overrides"
+            },
+            "ResultPath": "$.fargate_result",
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "Next": "HandleSmallFailure",
+                "ResultPath": "$.error_info"
+              }
+            ],
+            "End": true
+          },
+          "HandleSmallFailure": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+              "FunctionName": "${handle_failure_lambda_arn}",
+              "Payload.$": "$.error_info"
+            },
+            "End": true
+          }
+        }
+      },
+      "ResultPath": "$.preprocess_results",
+      "Next": "StartUpscaleTransform"
+    },
+    "PreprocessImagesMedium": {
+      "Type": "Map",
+      "ItemsPath": "$.batch_list_data.batch_data.image_batch_s3_keys",
+      "MaxConcurrencyPath": "$.pipeline_input.Payload.max_concurrency",
+      "Parameters": {
+        "batch_key.$": "$",
+        "s3_bucket.$": "$.pipeline_input.Payload.s3_bucket",
+        "temp_bucket.$": "$.pipeline_input.Payload.temp_bucket",
+        "metadata_s3_key.$": "$.pipeline_input.Payload.metadata_s3_key"
+      },
+      "Iterator": {
+        "StartAt": "PrepareMediumFargateParams",
+        "States": {
+          "PrepareMediumFargateParams": {
+            "Type": "Pass",
+            "Parameters": {
+              "Cluster": "${ecs_cluster_arn}",
+              "TaskDefinition": "${ecs_task_definition_medium_arn}",
+              "CapacityProviderStrategy": [
+                { "CapacityProvider": "FARGATE_SPOT", "Weight": 3 },
+                { "CapacityProvider": "FARGATE", "Weight": 1 }
+              ],
+              "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                  "Subnets": ${private_subnets_json},
+                  "SecurityGroups": ["${fargate_sg_id}"],
+                  "AssignPublicIp": "DISABLED"
+                }
+              },
+              "Overrides": {
+                "ContainerOverrides": [
+                  {
+                    "Name": "consolidated-processor",
+                    "Environment": [
+                      { "Name": "INPUT_BUCKET", "Value.$": "$.s3_bucket" },
+                      { "Name": "TEMP_BUCKET", "Value.$": "$.temp_bucket" },
+                      { "Name": "GOOGLE_SECRET_NAME", "Value": "${google_secret_name}" },
+                      { "Name": "METADATA_S3_KEY", "Value.$": "$.metadata_s3_key" },
+                      { "Name": "IMAGE_LIST_S3_KEY", "Value.$": "States.JsonToString($)" },
+                      { "Name": "PERFORMANCE_MODE", "Value": "optimized" },
+                      { "Name": "TASK_SIZE", "Value": "medium" }
+                    ]
+                  }
+                ]
+              }
+            },
+            "ResultPath": "$.fargate_params",
+            "Next": "RunMediumFargateTask"
+          },
+          "RunMediumFargateTask": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::ecs:runTask.sync",
+            "Parameters": {
+                "Cluster.$": "$.fargate_params.Cluster",
+                "TaskDefinition.$": "$.fargate_params.TaskDefinition",
+                "CapacityProviderStrategy.$": "$.fargate_params.CapacityProviderStrategy",
+                "NetworkConfiguration.$": "$.fargate_params.NetworkConfiguration",
+                "Overrides.$": "$.fargate_params.Overrides"
+            },
+            "ResultPath": "$.fargate_result",
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "Next": "HandleMediumFailure",
+                "ResultPath": "$.error_info"
+              }
+            ],
+            "End": true
+          },
+          "HandleMediumFailure": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+              "FunctionName": "${handle_failure_lambda_arn}",
+              "Payload.$": "$.error_info"
+            },
+            "End": true
+          }
+        }
+      },
+      "ResultPath": "$.preprocess_results",
+      "Next": "StartUpscaleTransform"
+    },
+    "PreprocessImagesLarge": {
+      "Type": "Map",
+      "ItemsPath": "$.batch_list_data.batch_data.image_batch_s3_keys",
+      "MaxConcurrencyPath": "$.pipeline_input.Payload.max_concurrency",
+      "Parameters": {
+        "batch_key.$": "$",
+        "s3_bucket.$": "$.pipeline_input.Payload.s3_bucket",
+        "temp_bucket.$": "$.pipeline_input.Payload.temp_bucket",
+        "metadata_s3_key.$": "$.pipeline_input.Payload.metadata_s3_key"
+      },
+      "Iterator": {
+        "StartAt": "PrepareLargeFargateParams",
+        "States": {
+          "PrepareLargeFargateParams": {
+            "Type": "Pass",
+            "Parameters": {
+              "Cluster": "${ecs_cluster_arn}",
+              "TaskDefinition": "${ecs_task_definition_large_arn}",
+              "CapacityProviderStrategy": [
+                { "CapacityProvider": "FARGATE", "Weight": 3 },
+                { "CapacityProvider": "FARGATE_SPOT", "Weight": 1 }
+              ],
+              "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                  "Subnets": ${private_subnets_json},
+                  "SecurityGroups": ["${fargate_sg_id}"],
+                  "AssignPublicIp": "DISABLED"
+                }
+              },
+              "Overrides": {
+                "ContainerOverrides": [
+                  {
+                    "Name": "consolidated-processor",
+                    "Environment": [
+                      { "Name": "INPUT_BUCKET", "Value.$": "$.s3_bucket" },
+                      { "Name": "TEMP_BUCKET", "Value.$": "$.temp_bucket" },
+                      { "Name": "GOOGLE_SECRET_NAME", "Value": "${google_secret_name}" },
+                      { "Name": "METADATA_S3_KEY", "Value.$": "$.metadata_s3_key" },
+                      { "Name": "IMAGE_LIST_S3_KEY", "Value.$": "States.JsonToString($)" },
+                      { "Name": "PERFORMANCE_MODE", "Value": "optimized" },
+                      { "Name": "TASK_SIZE", "Value": "large" }
+                    ]
+                  }
+                ]
+              }
+            },
+            "ResultPath": "$.fargate_params",
+            "Next": "RunLargeFargateTask"
+          },
+          "RunLargeFargateTask": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::ecs:runTask.sync",
+            "Parameters": {
+                "Cluster.$": "$.fargate_params.Cluster",
+                "TaskDefinition.$": "$.fargate_params.TaskDefinition",
+                "CapacityProviderStrategy.$": "$.fargate_params.CapacityProviderStrategy",
+                "NetworkConfiguration.$": "$.fargate_params.NetworkConfiguration",
+                "Overrides.$": "$.fargate_params.Overrides"
+            },
+            "ResultPath": "$.fargate_result",
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "Next": "HandleLargeFailure",
+                "ResultPath": "$.error_info"
+              }
+            ],
+            "End": true
+          },
+          "HandleLargeFailure": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+              "FunctionName": "${handle_failure_lambda_arn}",
+              "Payload.$": "$.error_info"
+            },
+            "End": true
+          }
+        }
+      },
+      "ResultPath": "$.preprocess_results",
+      "Next": "StartUpscaleTransform"
+    },
+    "PreprocessImagesXLarge": {
+      "Type": "Map",
+      "ItemsPath": "$.batch_list_data.batch_data.image_batch_s3_keys",
+      "MaxConcurrencyPath": "$.pipeline_input.Payload.max_concurrency",
+      "Parameters": {
+        "batch_key.$": "$",
+        "s3_bucket.$": "$.pipeline_input.Payload.s3_bucket",
+        "temp_bucket.$": "$.pipeline_input.Payload.temp_bucket",
+        "metadata_s3_key.$": "$.pipeline_input.Payload.metadata_s3_key"
+      },
+      "Iterator": {
+        "StartAt": "PrepareXLargeFargateParams",
+        "States": {
+          "PrepareXLargeFargateParams": {
+            "Type": "Pass",
+            "Parameters": {
+              "Cluster": "${ecs_cluster_arn}",
+              "TaskDefinition": "${ecs_task_definition_xlarge_arn}",
+              "CapacityProviderStrategy": [
+                { "CapacityProvider": "FARGATE", "Weight": 3 },
+                { "CapacityProvider": "FARGATE_SPOT", "Weight": 1 }
+              ],
+              "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                  "Subnets": ${private_subnets_json},
+                  "SecurityGroups": ["${fargate_sg_id}"],
+                  "AssignPublicIp": "DISABLED"
+                }
+              },
+              "Overrides": {
+                "ContainerOverrides": [
+                  {
+                    "Name": "consolidated-processor",
+                    "Environment": [
+                      { "Name": "INPUT_BUCKET", "Value.$": "$.s3_bucket" },
+                      { "Name": "TEMP_BUCKET", "Value.$": "$.temp_bucket" },
+                      { "Name": "GOOGLE_SECRET_NAME", "Value": "${google_secret_name}" },
+                      { "Name": "METADATA_S3_KEY", "Value.$": "$.metadata_s3_key" },
+                      { "Name": "IMAGE_LIST_S3_KEY", "Value.$": "States.JsonToString($)" },
+                      { "Name": "PERFORMANCE_MODE", "Value": "optimized" },
+                      { "Name": "TASK_SIZE", "Value": "xlarge" }
+                    ]
+                  }
+                ]
+              }
+            },
+            "ResultPath": "$.fargate_params",
+            "Next": "RunXLargeFargateTask"
+          },
+          "RunXLargeFargateTask": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::ecs:runTask.sync",
+            "Parameters": {
+                "Cluster.$": "$.fargate_params.Cluster",
+                "TaskDefinition.$": "$.fargate_params.TaskDefinition",
+                "CapacityProviderStrategy.$": "$.fargate_params.CapacityProviderStrategy",
+                "NetworkConfiguration.$": "$.fargate_params.NetworkConfiguration",
+                "Overrides.$": "$.fargate_params.Overrides"
+            },
+            "ResultPath": "$.fargate_result",
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "Next": "HandleXLargeFailure",
+                "ResultPath": "$.error_info"
+              }
+            ],
+            "End": true
+          },
+          "HandleXLargeFailure": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+              "FunctionName": "${handle_failure_lambda_arn}",
+              "Payload.$": "$.error_info"
+            },
+            "End": true
+          }
+        }
+      },
+      "ResultPath": "$.preprocess_results",
+      "Next": "StartUpscaleTransform"
+    },
+    "StartUpscaleTransform": {
+      "Type": "Pass",
+      "Comment": "Transform processed images from Fargate outputs to upscale format",
+      "Parameters": {
+        "processed_images.$": "$[*][*]",
+        "pipeline_input.$": "$.pipeline_input"
+      },
+      "ResultPath": "$.transformed_data", 
+      "Next": "UpscaleImages"
+    },
+    "UpscaleImages": {
+      "Type": "Map",
+      "Comment": "Upscale images using SageMaker endpoint via Lambda",
+      "ItemsPath": "$.transformed_data.processed_images",
+      "MaxConcurrency": 10,
+      "Parameters": {
+        "image_key.$": "$",
+        "temp_bucket.$": "$.pipeline_input.Payload.temp_bucket",
+        "sagemaker_endpoint_name": "${sagemaker_endpoint_name}",
+        "is_cover": false
+      },
+      "Iterator": {
+        "StartAt": "InvokeUpscaleLambda",
+        "States": {
+          "InvokeUpscaleLambda": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+              "FunctionName": "${upscale_image_lambda_arn}",
+              "Payload.$": "$"
+            },
+            "ResultPath": "$.upscale_result",
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "Next": "HandleUpscaleFailure",
+                "ResultPath": "$.error_info"
+              }
+            ],
+            "End": true
+          },
+          "HandleUpscaleFailure": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+              "FunctionName": "${handle_failure_lambda_arn}",
+              "Payload.$": "$.error_info"
+            },
+            "End": true
+          }
+        }
+      },
+      "ResultPath": "$.upscale_results",
+      "Next": "ProcessOCR"
+    },
+    "ProcessOCR": {
+      "Type": "Map",
+      "Comment": "Run OCR on upscaled images with optimized concurrency",
+      "ItemsPath": "$.upscale_results",
+      "MaxConcurrency": 50,
+      "Parameters": {
+        "upscaled_image_key.$": "$.upscale_result.Payload.upscaled_image_key",
+        "temp_bucket.$": "$.pipeline_input.Payload.temp_bucket",
+        "original_image_key.$": "$.upscale_result.Payload.image_key"
+      },
+      "Iterator": {
+        "StartAt": "InvokeOcrLambda",
+        "States": {
+          "InvokeOcrLambda": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+              "FunctionName": "${process_ocr_lambda_arn}",
+              "Payload.$": "$"
+            },
+            "ResultPath": "$.ocr_result",
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "Next": "HandleOcrFailure",
+                "ResultPath": "$.error_info"
+              }
+            ],
+            "End": true
+          },
+          "HandleOcrFailure": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+              "FunctionName": "${handle_failure_lambda_arn}",
+              "Payload": {
+                "error_type": "OcrFailure",
+                "error_details.$": "$.error_info",
+                "execution_name.$": "$$.Execution.Name",
+                "state_name": "ProcessOCR",
+                "failed_image.$": "$.upscaled_image_key"
+              }
+            },
+            "End": true
+          }
+        }
+      },
+      "ResultPath": "$.ocr_results",
+      "Next": "GeneratePDF"
+    },
+    "GeneratePDF": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${generate_pdf_lambda_arn}",
+        "Payload": {
+          "ocr_results.$": "$.ocr_results",
+          "metadata_s3_key.$": "$.pipeline_input.Payload.metadata_s3_key",
+          "s3_bucket.$": "$.pipeline_input.Payload.s3_bucket",
+          "temp_bucket.$": "$.pipeline_input.Payload.temp_bucket",
+          "output_bucket.$": "$.pipeline_input.Payload.output_bucket"
+        }
+      },
+      "ResultPath": "$.pdf_result",
+      "Next": "FinalCleanup"
+    },
+    "FinalCleanup": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${final_cleanup_lambda_arn}",
+        "Payload": {
+          "temp_bucket.$": "$.pipeline_input.Payload.temp_bucket",
+          "cluster_name": "${ecs_cluster_arn}",
+          "sagemaker_endpoint": "${sagemaker_endpoint_name}",
+          "delete_sagemaker_endpoint_on_completion": true
+        }
+      },
+      "ResultPath": "$.cleanup_result",
+      "Next": "GenerateRunSummary"
+    },
+    "GenerateRunSummary": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${generate_run_summary_lambda_arn}",
+        "Payload": {
+          "execution_name.$": "$$.Execution.Name",
+          "start_time.$": "$$.Execution.StartTime",
+          "pipeline_input.$": "$.pipeline_input",
+          "processed_images.$": "$.processed_images",
+          "upscale_results.$": "$.upscale_results", 
+          "ocr_results.$": "$.ocr_results",
+          "pdf_result.$": "$.pdf_result",
+          "cleanup_result.$": "$.cleanup_result"
+        }
+      },
+      "End": true
+    }
+  }
+}
