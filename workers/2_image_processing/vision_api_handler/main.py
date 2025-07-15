@@ -2,6 +2,8 @@ import json
 import boto3
 import os
 import logging
+import math
+import statistics
 from datetime import datetime
 from google.cloud import vision
 from google.oauth2 import service_account
