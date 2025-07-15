@@ -175,7 +175,3 @@ scan-to-searchable-pdf/
 - `z.jpg`: 뒤표지
 
 이 파일들은 처리 단계를 건너뛰고 최종 PDF에만 포함됩니다.
-
-## 라이선스
-
-MIT License
