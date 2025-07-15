@@ -59,7 +59,7 @@ deploy)
   SAGEMAKER_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/sagemaker-realesrgan"
 
   FARGATE_IMAGE_TAG=$(build_and_push "workers/2_image_processing/skew_corrector/Dockerfile" "$FARGATE_ECR_REPO" "workers/2_image_processing/skew_corrector/" "--platform linux/arm64")
-  VISION_LAMBDA_IMAGE_TAG=$(build_and_push "workers/2_image_processing/vision_api_handler/Dockerfile" "$VISION_LAMBDA_ECR_REPO" "workers/2_image_processing/vision_api_handler/" "--platform linux/amd64")
+  VISION_LAMBDA_IMAGE_TAG=$(build_and_push "workers/2_image_processing/vision_api_handler/Dockerfile" "$VISION_LAMBDA_ECR_REPO" "workers/2_image_processing/vision_api_handler/" "--platform linux/arm64")
   SAGEMAKER_IMAGE_TAG=$(build_and_push "sagemaker/Dockerfile" "$SAGEMAKER_ECR_REPO" "sagemaker/" "--platform linux/amd64")
 
   log_info "Deploying the rest of the AWS resources..."
