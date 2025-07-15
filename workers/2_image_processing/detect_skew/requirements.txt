@@ -1,0 +1,4 @@
+boto3
+google-cloud-vision
+google-auth-oauthlib
+google-api-python-client

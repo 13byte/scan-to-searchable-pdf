@@ -137,7 +137,6 @@
             "Parameters": {
               "FunctionName": "${process_ocr_lambda_arn}",
               "Payload": {
-                "function_type": "process_ocr",
                 "run_id.$": "$.run_id",
                 "image_key.$": "$.image_key",
                 "temp_bucket.$": "$.temp_bucket",

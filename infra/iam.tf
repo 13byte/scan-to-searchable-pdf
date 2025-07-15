@@ -111,16 +111,6 @@ resource "aws_iam_policy" "base_policy" {
       {
         Effect = "Allow",
         Action = [
-            "ecr:GetAuthorizationToken",
-            "ecr:BatchCheckLayerAvailability",
-            "ecr:GetDownloadUrlForLayer",
-            "ecr:BatchGetImage"
-        ],
-        Resource = "*"
-      },
-      {
-        Effect = "Allow",
-        Action = [
           "sqs:SendMessage"
         ],
         Resource = aws_sqs_queue.failure_dlq.arn
@@ -188,7 +178,15 @@ resource "aws_iam_policy" "step_functions_policy" {
         Action = [
           "lambda:InvokeFunction"
         ],
-        Resource = "*"
+        Resource = [
+          aws_lambda_function.initialize_state.arn,
+          aws_lambda_function.orchestrator.arn,
+          aws_lambda_function.detect_skew.arn,
+          aws_lambda_function.process_ocr.arn,
+          aws_lambda_function.upscaler.arn,
+          aws_lambda_function.pdf_generator.arn,
+          aws_lambda_function.summary_generator.arn
+        ]
       },
       {
         Effect = "Allow",

@@ -1,9 +1,10 @@
 resource "null_resource" "build_pdf_layer" {
   triggers = {
     requirements_hash = filemd5("${path.module}/../workers/3_finalization/pdf_generator/requirements.txt")
+    font_hash         = filemd5("${path.module}/../config/NotoSansKR-Regular.ttf")
   }
   provisioner "local-exec" {
-    command = "pip install -r ${path.module}/../workers/3_finalization/pdf_generator/requirements.txt -t ${path.module}/../build/lambda-layer/python && zip -r ${path.module}/../build/pdf-dependencies-layer.zip ${path.module}/../build/lambda-layer"
+    command = "pip install -r ${path.module}/../workers/3_finalization/pdf_generator/requirements.txt -t ${path.module}/../build/lambda-layer/python && cp ${path.module}/../config/NotoSansKR-Regular.ttf ${path.module}/../build/lambda-layer/python/NotoSansKR-Regular.ttf && zip -r ${path.module}/../build/pdf-dependencies-layer.zip ${path.module}/../build/lambda-layer"
   }
 }
 
@@ -48,7 +49,8 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
     upscaler          = "upscaler"
     pdf_generator     = "pdf_generator"
     summary_generator = "summary_generator"
-    vision_api_handler = "vision_api_handler"
+    detect_skew        = "detect_skew"
+    process_ocr        = "process_ocr"
   }
   name              = "/aws/lambda/${var.project_name}-${each.value}"
   retention_in_days = 7
