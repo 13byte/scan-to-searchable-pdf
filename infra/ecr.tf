@@ -16,8 +16,26 @@ resource "aws_ecr_repository" "sagemaker_realesrgan" {
   tags = { Project = var.project_name }
 }
 
-resource "aws_ecr_repository" "vision_api_handler_lambda" {
-  name                 = "${var.project_name}/vision-api-handler"
+resource "aws_ecr_repository" "detect_skew_lambda" {
+  name                 = "${var.project_name}/detect-skew"
+  image_tag_mutability = "MUTABLE"
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+  tags = { Project = var.project_name }
+}
+
+resource "aws_ecr_repository" "process_ocr_lambda" {
+  name                 = "${var.project_name}/process-ocr"
+  image_tag_mutability = "MUTABLE"
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+  tags = { Project = var.project_name }
+}
+
+resource "aws_ecr_repository" "trigger_pipeline_lambda" {
+  name                 = "${var.project_name}/trigger-pipeline"
   image_tag_mutability = "MUTABLE"
   image_scanning_configuration {
     scan_on_push = true
@@ -29,7 +47,9 @@ resource "aws_ecr_lifecycle_policy" "default_policy" {
   for_each = {
     fargate   = aws_ecr_repository.fargate_processor.name
     sagemaker = aws_ecr_repository.sagemaker_realesrgan.name
-    lambda    = aws_ecr_repository.vision_api_handler_lambda.name
+    detect_skew = aws_ecr_repository.detect_skew_lambda.name
+    process_ocr = aws_ecr_repository.process_ocr_lambda.name
+    trigger_pipeline = aws_ecr_repository.trigger_pipeline_lambda.name
   }
   repository = each.value
 
