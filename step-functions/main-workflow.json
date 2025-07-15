@@ -1,5 +1,5 @@
 {
-  "Comment": "스캔된 책 이미지 처리 및 PDF 생성 워크플로우 (업데이트 버전).",
+  "Comment": "스캔된 책 이미지 처리 및 PDF 생성 워크플로우",
   "StartAt": "TriggerPipeline",
   "States": {
     "TriggerPipeline": {
@@ -13,7 +13,22 @@
         }
       },
       "ResultPath": "$.pipeline_input",
-      "Next": "Orchestrator"
+      "Next": "Orchestrator",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "WorkflowFailed",
+          "ResultPath": "$.error_info"
+        }
+      ]
     },
     "Orchestrator": {
       "Type": "Task",
@@ -28,7 +43,22 @@
         }
       },
       "ResultPath": "$.orchestrator_output",
-      "Next": "IsWorkDone"
+      "Next": "IsWorkDone",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "WorkflowFailed",
+          "ResultPath": "$.error_info"
+        }
+      ]
     },
     "IsWorkDone": {
       "Type": "Choice",
@@ -46,6 +76,7 @@
       "ItemsPath": "$.orchestrator_output.Payload.batch_to_process",
       "MaxConcurrency": 50,
       "ResultPath": "$.map_results",
+      "ToleratedFailurePercentage": 10,
       "Iterator": {
         "StartAt": "DetectSkew",
         "States": {
@@ -62,10 +93,25 @@
             },
             "ResultPath": "$.skew_result",
             "Next": "CorrectSkew",
+            "Retry": [
+              {
+                "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 3,
+                "BackoffRate": 2.0
+              },
+              {
+                "ErrorEquals": ["States.TaskFailed"],
+                "IntervalSeconds": 1,
+                "MaxAttempts": 2,
+                "BackoffRate": 1.5
+              }
+            ],
             "Catch": [
               {
                 "ErrorEquals": ["States.ALL"],
-                "Next": "MapTaskFailed"
+                "Next": "MapTaskFailed",
+                "ResultPath": "$.error_info"
               }
             ]
           },
@@ -80,7 +126,7 @@
                 "AwsvpcConfiguration": {
                   "Subnets": ["${subnet_id}"],
                   "SecurityGroups": ["${security_group_id}"],
-                  "AssignPublicIp": "ENABLED"
+                  "AssignPublicIp": "DISABLED"
                 }
               },
               "Overrides": {
@@ -99,10 +145,19 @@
             },
             "ResultPath": "$.correction_result",
             "Next": "UpscaleImage",
+            "Retry": [
+              {
+                "ErrorEquals": ["ECS.AmazonECSException"],
+                "IntervalSeconds": 30,
+                "MaxAttempts": 2,
+                "BackoffRate": 2.0
+              }
+            ],
             "Catch": [
               {
                 "ErrorEquals": ["States.ALL"],
-                "Next": "MapTaskFailed"
+                "Next": "MapTaskFailed",
+                "ResultPath": "$.error_info"
               }
             ]
           },
@@ -122,10 +177,19 @@
             },
             "ResultPath": "$.upscale_result",
             "Next": "ProcessOCR",
+            "Retry": [
+              {
+                "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+                "IntervalSeconds": 5,
+                "MaxAttempts": 3,
+                "BackoffRate": 2.0
+              }
+            ],
             "Catch": [
               {
                 "ErrorEquals": ["States.ALL"],
-                "Next": "MapTaskFailed"
+                "Next": "MapTaskFailed",
+                "ResultPath": "$.error_info"
               }
             ]
           },
@@ -143,10 +207,19 @@
             },
             "ResultPath": "$.ocr_result",
             "End": true,
+            "Retry": [
+              {
+                "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 3,
+                "BackoffRate": 2.0
+              }
+            ],
             "Catch": [
               {
                 "ErrorEquals": ["States.ALL"],
-                "Next": "MapTaskFailed"
+                "Next": "MapTaskFailed",
+                "ResultPath": "$.error_info"
               }
             ]
           },
@@ -157,12 +230,47 @@
           }
         }
       },
-      "Next": "Wait"
+      "Next": "WaitForEventBridge"
     },
-    "Wait": {
+    "WaitForEventBridge": {
       "Type": "Wait",
-      "Seconds": 2,
-      "Next": "Orchestrator"
+      "Seconds": 5,
+      "Next": "CheckEventBridgeCompletion"
+    },
+    "CheckEventBridgeCompletion": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${orchestrator_lambda_arn}",
+        "Payload": {
+          "run_id.$": "$.Execution.Name",
+          "input_bucket.$": "$.input_bucket",
+          "temp_bucket.$": "$.temp_bucket",
+          "output_bucket.$": "$.output_bucket",
+          "check_only": true
+        }
+      },
+      "ResultPath": "$.completion_check",
+      "Next": "IsEventProcessingDone",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ]
+    },
+    "IsEventProcessingDone": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.completion_check.Payload.is_work_done",
+          "BooleanEquals": true,
+          "Next": "GeneratePDF"
+        }
+      ],
+      "Default": "Orchestrator"
     },
     "GeneratePDF": {
       "Type": "Task",
@@ -177,7 +285,22 @@
         }
       },
       "ResultPath": "$.pdf_result",
-      "Next": "GenerateRunSummary"
+      "Next": "GenerateRunSummary",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "WorkflowFailed",
+          "ResultPath": "$.error_info"
+        }
+      ]
     },
     "GenerateRunSummary": {
       "Type": "Task",
@@ -190,7 +313,19 @@
           "results.$": "$.pdf_result.Payload"
         }
       },
-      "End": true
+      "End": true,
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ]
+    },
+    "WorkflowFailed": {
+      "Type": "Fail",
+      "Cause": "워크플로우 실행 중 복구 불가능한 오류 발생"
     }
   }
 }
