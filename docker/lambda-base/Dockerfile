@@ -14,7 +14,7 @@ RUN dnf update -y && \
 COPY requirements.txt ${LAMBDA_TASK_ROOT}/
 
 # Install Python dependencies with Google Cloud Vision
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install uv && uv pip install --system --no-cache -r requirements.txt
 
 # Copy function code (will be overridden in specific Lambda functions)
 COPY lambda_function.py ${LAMBDA_TASK_ROOT}/

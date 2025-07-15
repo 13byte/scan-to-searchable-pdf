@@ -12,7 +12,7 @@ RUN dnf update -y && \
 
 # Copy requirements and install dependencies
 COPY requirements.txt ${LAMBDA_TASK_ROOT}/
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install uv && uv pip install --system --no-cache -r requirements.txt
 
 # Copy Lambda function code
 COPY index.py ${LAMBDA_TASK_ROOT}/lambda_function.py

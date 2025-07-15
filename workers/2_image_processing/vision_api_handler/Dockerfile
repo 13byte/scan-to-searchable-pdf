@@ -3,7 +3,7 @@ FROM public.ecr.aws/lambda/python:3.12
 
 # Google Vision API 및 필수 의존성 설치
 COPY requirements.txt ${LAMBDA_TASK_ROOT}
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install uv && uv pip install --system --no-cache -r requirements.txt
 
 # Lambda 함수 코드 복사
 COPY main.py requirements.txt ./
