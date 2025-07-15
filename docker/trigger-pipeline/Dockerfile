@@ -1,4 +1,4 @@
-# Trigger Pipeline Lambda Container Image
+# AWS Lambda Python 3.12 Base Image with Google Cloud Vision
 FROM public.ecr.aws/lambda/python:3.12
 
 # Set working directory
@@ -10,12 +10,14 @@ RUN dnf update -y && \
   dnf clean all && \
   rm -rf /var/cache/yum
 
-# Copy requirements and install dependencies
+# Copy requirements first for better caching
 COPY requirements.txt ${LAMBDA_TASK_ROOT}/
+
+# Install Python dependencies with Google Cloud Vision
 RUN pip install uv && uv pip install --system --no-cache -r requirements.txt
 
-# Copy Lambda function code
-COPY index.py ${LAMBDA_TASK_ROOT}/lambda_function.py
+# Copy function code
+COPY main.py ${LAMBDA_TASK_ROOT}/lambda_function.py
 
-# Set the Lambda handler
+# Set the default Lambda handler
 CMD ["lambda_function.lambda_handler"]
