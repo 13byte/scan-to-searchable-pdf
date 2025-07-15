@@ -61,7 +61,7 @@ resource "aws_lambda_function" "vision_api_handler" {
   image_uri     = "${aws_ecr_repository.vision_api_handler_lambda.repository_url}:${var.vision_lambda_image_tag}"
   architectures = ["x86_64"]
   timeout       = 120
-  memory_size   = 1024
+  memory_size   = 512  # 최적화: 1024→512MB, Google Vision API는 네트워크 호출 위주
   environment {
     variables = {
       DYNAMODB_STATE_TABLE = aws_dynamodb_table.state_tracking.name
@@ -115,7 +115,7 @@ resource "aws_lambda_function" "upscaler" {
   runtime          = "python3.12"
   architectures    = ["arm64"]
   timeout          = 300
-  memory_size      = 1024  # 50% 메모리 절감 (2048→1024)
+  memory_size      = 768  # 최적화: 1024→768MB, SageMaker 호출과 최소한의 이미지 처리
   filename         = data.archive_file.upscaler.output_path
   source_code_hash = data.archive_file.upscaler.output_base64sha256
   environment {

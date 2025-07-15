@@ -68,7 +68,14 @@ resource "aws_iam_policy" "base_policy" {
           "sagemaker:DeleteEndpointConfig",
           "ecs:DeleteService",
           "ecs:UpdateService",
-          "ecs:DeregisterTaskDefinition"
+          "ecs:DeregisterTaskDefinition",
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:BatchWriteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
         ],
         Resource = [
           aws_s3_bucket.input.arn,
@@ -80,7 +87,10 @@ resource "aws_iam_policy" "base_policy" {
           aws_sagemaker_endpoint.realesrgan.arn,
           aws_sagemaker_endpoint_configuration.realesrgan.arn,
           aws_ecs_cluster.main.arn,
-          "${aws_ecs_cluster.main.arn}/*"
+          "${aws_ecs_cluster.main.arn}/*",
+          aws_dynamodb_table.state_tracking.arn,
+          "${aws_dynamodb_table.state_tracking.arn}/*",
+          "${aws_dynamodb_table.state_tracking.arn}/index/*"
         ]
       },
       {
