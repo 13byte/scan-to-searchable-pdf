@@ -55,17 +55,22 @@ deploy)
 
   log_info "Building and pushing Docker images..."
   FARGATE_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/skew-corrector"
-  VISION_LAMBDA_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/vision-api-handler"
-  SAGEMAKER_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/sagemaker-realesrgan"
+  DETECT_SKEW_LAMBDA_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/detect-skew"
+  PROCESS_OCR_LAMBDA_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/process-ocr"
+  TRIGGER_PIPELINE_LAMBDA_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/trigger-pipeline"
 
   FARGATE_IMAGE_TAG=$(build_and_push "workers/2_image_processing/skew_corrector/Dockerfile" "$FARGATE_ECR_REPO" "workers/2_image_processing/skew_corrector/" "--platform linux/arm64")
-  VISION_LAMBDA_IMAGE_TAG=$(build_and_push "workers/2_image_processing/vision_api_handler/Dockerfile" "$VISION_LAMBDA_ECR_REPO" "workers/2_image_processing/vision_api_handler/" "--platform linux/arm64")
+  DETECT_SKEW_LAMBDA_IMAGE_TAG=$(build_and_push "docker/detect-skew/Dockerfile" "$DETECT_SKEW_LAMBDA_ECR_REPO" "docker/detect-skew/" "--platform linux/arm64")
+  PROCESS_OCR_LAMBDA_IMAGE_TAG=$(build_and_push "docker/process-ocr/Dockerfile" "$PROCESS_OCR_LAMBDA_ECR_REPO" "docker/process-ocr/" "--platform linux/arm64")
+  TRIGGER_PIPELINE_LAMBDA_IMAGE_TAG=$(build_and_push "docker/trigger-pipeline/Dockerfile" "$TRIGGER_PIPELINE_LAMBDA_ECR_REPO" "docker/trigger-pipeline/" "--platform linux/arm64")
   SAGEMAKER_IMAGE_TAG=$(build_and_push "sagemaker/Dockerfile" "$SAGEMAKER_ECR_REPO" "sagemaker/" "--platform linux/amd64")
 
   log_info "Deploying the rest of the AWS resources..."
   (cd infra && terraform apply -auto-approve \
     -var="fargate_image_tag=${FARGATE_IMAGE_TAG}" \
-    -var="vision_lambda_image_tag=${VISION_LAMBDA_IMAGE_TAG}" \
+    -var="detect_skew_lambda_image_tag=${DETECT_SKEW_LAMBDA_IMAGE_TAG}" \
+    -var="process_ocr_lambda_image_tag=${PROCESS_OCR_LAMBDA_IMAGE_TAG}" \
+    -var="trigger_pipeline_lambda_image_tag=${TRIGGER_PIPELINE_LAMBDA_IMAGE_TAG}" \
     -var="sagemaker_image_tag=${SAGEMAKER_IMAGE_TAG}")
 
   log_success "Infrastructure deployment completed successfully."
