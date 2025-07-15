@@ -9,4 +9,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY main.py requirements.txt ./
 
 # Lambda 런타임 핸들러 설정 (CRITICAL: Lambda Container Entry Point)
-CMD ["app.handler"]
+CMD ["main.handler"]
