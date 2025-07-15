@@ -22,6 +22,24 @@ variable "vision_lambda_image_tag" {
   default     = "latest"
 }
 
+variable "detect_skew_lambda_image_tag" {
+  description = "Detect Skew Lambda 컨테이너 이미지 태그."
+  type        = string
+  default     = "latest"
+}
+
+variable "process_ocr_lambda_image_tag" {
+  description = "Process OCR Lambda 컨테이너 이미지 태그."
+  type        = string
+  default     = "latest"
+}
+
+variable "trigger_pipeline_lambda_image_tag" {
+  description = "Trigger Pipeline Lambda 컨테이너 이미지 태그."
+  type        = string
+  default     = "latest"
+}
+
 variable "sagemaker_image_tag" {
   description = "SageMaker Docker 이미지 태그."
   type        = string
