@@ -146,3 +146,39 @@ resource "aws_vpc_endpoint" "states" {
   subnet_ids          = aws_subnet.private[*].id
   security_group_ids  = [aws_security_group.main.id]
 }
+
+resource "aws_vpc_endpoint" "dynamodb" {
+  vpc_id          = aws_vpc.main.id
+  service_name    = "com.amazonaws.${var.aws_region}.dynamodb"
+  route_table_ids = [aws_route_table.private.id]
+
+  tags = {
+    Name = "${var.project_name}-dynamodb-endpoint"
+  }
+}
+
+resource "aws_vpc_endpoint" "events" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.events"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.main.id]
+
+  tags = {
+    Name = "${var.project_name}-events-endpoint"
+  }
+}
+
+resource "aws_vpc_endpoint" "lambda" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.lambda"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.main.id]
+
+  tags = {
+    Name = "${var.project_name}-lambda-endpoint"
+  }
+}
