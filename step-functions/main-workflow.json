@@ -1,19 +1,18 @@
 {
-  "Comment": "스캔된 책 이미지 처리 및 PDF 생성 워크플로우.",
-  "StartAt": "InitializeState",
+  "Comment": "스캔된 책 이미지 처리 및 PDF 생성 워크플로우 (업데이트 버전).",
+  "StartAt": "TriggerPipeline",
   "States": {
-    "InitializeState": {
+    "TriggerPipeline": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": {
-        "FunctionName": "${initialize_state_lambda_arn}",
+        "FunctionName": "${trigger_pipeline_lambda_arn}",
         "Payload": {
-          "run_id.$": "$$.Execution.Name",
-          "input_bucket.$": "$.input_bucket",
-          "input_prefix.$": "$.input_prefix"
+          "s3_bucket.$": "$.input_bucket",
+          "s3_prefix.$": "$.input_prefix"
         }
       },
-      "ResultPath": "$.initialization",
+      "ResultPath": "$.pipeline_input",
       "Next": "Orchestrator"
     },
     "Orchestrator": {
@@ -22,7 +21,7 @@
       "Parameters": {
         "FunctionName": "${orchestrator_lambda_arn}",
         "Payload": {
-          "run_id.$": "$$.Execution.Name",
+          "run_id.$": "$.Execution.Name",
           "input_bucket.$": "$.input_bucket",
           "temp_bucket.$": "$.temp_bucket",
           "output_bucket.$": "$.output_bucket"
@@ -56,7 +55,6 @@
             "Parameters": {
               "FunctionName": "${detect_skew_lambda_arn}",
               "Payload": {
-                "function_type": "detect_skew",
                 "run_id.$": "$.run_id",
                 "image_key.$": "$.image_key",
                 "input_bucket.$": "$.input_bucket"
@@ -172,7 +170,7 @@
       "Parameters": {
         "FunctionName": "${generate_pdf_lambda_arn}",
         "Payload": {
-          "run_id.$": "$$.Execution.Name",
+          "run_id.$": "$.Execution.Name",
           "input_bucket.$": "$.input_bucket",
           "output_bucket.$": "$.output_bucket",
           "temp_bucket.$": "$.temp_bucket"
@@ -187,8 +185,8 @@
       "Parameters": {
         "FunctionName": "${generate_run_summary_lambda_arn}",
         "Payload": {
-          "execution_id.$": "$$.Execution.Name",
-          "start_time.$": "$$.Execution.StartTime",
+          "execution_id.$": "$.Execution.Name",
+          "start_time.$": "$.Execution.StartTime",
           "results.$": "$.pdf_result.Payload"
         }
       },
