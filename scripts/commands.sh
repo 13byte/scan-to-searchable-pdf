@@ -51,7 +51,7 @@ deploy)
 
   log_info "Initializing Terraform and creating ECR repositories first..."
   (cd infra && terraform init)
-  (cd infra && terraform apply -auto-approve -target=aws_ecr_repository.fargate_processor -target=aws_ecr_repository.sagemaker_realesrgan -target=aws_ecr_repository.vision_api_handler_lambda)
+  (cd infra && terraform apply -auto-approve -target=aws_ecr_repository.fargate_processor -target=aws_ecr_repository.sagemaker_realesrgan)
 
   log_info "Building and pushing Docker images..."
   FARGATE_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/skew-corrector"
