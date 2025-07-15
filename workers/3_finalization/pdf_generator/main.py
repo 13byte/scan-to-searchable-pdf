@@ -6,6 +6,11 @@ from datetime import datetime
 from botocore.exceptions import ClientError
 from botocore.config import Config
 
+# fpdf2 및 Pillow 임포트
+from fpdf import FPDF
+from PIL import Image
+from io import BytesIO
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
@@ -22,6 +27,9 @@ dynamodb = boto3.resource('dynamodb', config=retry_config)
 DYNAMODB_TABLE_NAME = os.environ['DYNAMODB_STATE_TABLE']
 OUTPUT_BUCKET = os.environ['OUTPUT_BUCKET']
 TEMP_BUCKET = os.environ['TEMP_BUCKET']
+
+# 한글 폰트 경로 (Lambda 레이어에 포함되어야 함)
+FONT_PATH = "/opt/python/NotoSansKR-Regular.ttf" # Lambda 레이어 경로에 맞게 수정
 
 class PDFGenerationError(Exception):
     pass
@@ -89,13 +97,16 @@ def extract_processed_pages(items, input_bucket):
             continue
             
         output_path = None
+        ocr_output_key = None # OCR 결과 S3 키 추가
         try:
             if item.get('is_cover'):
                 output_path = item.get('image_key')
             else:
                 job_output = item.get('job_output', {})
                 upscale_data = job_output.get('upscale', {})
+                ocr_data = job_output.get('ocr', {}) # OCR 데이터 추출
                 output_path = upscale_data.get('upscaled_image_key')
+                ocr_output_key = ocr_data.get('ocr_output_key') # OCR 결과 S3 키 저장
         except (AttributeError, TypeError):
             logger.warning(f"잘못된 job_output 구조: {item.get('image_key')}")
             continue
@@ -104,7 +115,8 @@ def extract_processed_pages(items, input_bucket):
             processed_pages.append({
                 's3_key': output_path,
                 'is_cover': item.get('is_cover', False),
-                'original_key': item['image_key']
+                'original_key': item['image_key'],
+                'ocr_output_key': ocr_output_key # OCR 결과 S3 키 추가
             })
         else:
             logger.warning(f"항목 {item['image_key']}은(는) 완료되었지만 유효한 출력 경로가 없습니다.")
@@ -160,11 +172,6 @@ def handler(event, context):
         
         logger.info(f"최종 PDF는 {len(final_image_order)} 페이지를 포함합니다.")
         
-        # 5. PDF 생성 (원본 로직 유지)
-        from fpdf import FPDF
-        from PIL import Image
-        from io import BytesIO
-        
         class PDF(FPDF):
             def header(self):
                 pass
@@ -173,9 +180,20 @@ def handler(event, context):
         
         pdf = PDF(orientation='P', unit='pt')
         
+        # 한글 폰트 추가 (Lambda 레이어에 폰트 파일이 있어야 함)
+        if os.path.exists(FONT_PATH):
+            pdf.add_font('NotoSansKR', '', FONT_PATH, uni=True)
+        else:
+            logger.warning(f"폰트 파일이 없습니다: {FONT_PATH}. 한글 텍스트가 제대로 표시되지 않을 수 있습니다.")
+            # 대체 폰트 또는 기본 폰트 사용
+            pdf.add_font('DejaVuSansCondensed', '', '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf', uni=True) # 예시
+            pdf.set_font('DejaVuSansCondensed', '', 10)
+
+
         for page_info in final_image_order:
             bucket = TEMP_BUCKET if not page_info['is_cover'] else event['input_bucket']
             key = page_info['s3_key']
+            ocr_key = page_info['ocr_output_key'] # OCR 결과 S3 키
             
             logger.info(f"버킷 {bucket}에서 {key}를 PDF에 추가.")
             
@@ -187,6 +205,30 @@ def handler(event, context):
                     width, height = img.size
                     pdf.add_page(format=(width, height))
                     pdf.image(BytesIO(img_data), x=0, y=0, w=width, h=height)
+                    
+                    # OCR 텍스트 레이어 추가 (표지 파일 제외)
+                    if not page_info['is_cover'] and ocr_key:
+                        try:
+                            ocr_obj = s3_client.get_object(Bucket=TEMP_BUCKET, Key=ocr_key)
+                            ocr_text = ocr_obj['Body'].read().decode('utf-8')
+                            
+                            # 텍스트 레이어 추가: 투명하게, 이미지와 동일한 위치에
+                            pdf.set_xy(0, 0) # 페이지의 왼쪽 상단으로 이동
+                            pdf.set_font('NotoSansKR', '', 10) # 폰트 설정
+                            pdf.set_text_color(0, 0, 0) # 텍스트 색상 (검정)
+                            pdf.set_alpha(0) # 투명도 0 (완전 투명)
+                            
+                            # 텍스트를 여러 줄로 나누어 추가 (간단한 예시, 실제 OCR 결과는 더 복잡할 수 있음)
+                            # 실제 OCR 결과의 바운딩 박스 정보를 활용하여 정확한 위치에 텍스트를 배치해야 함
+                            # 여기서는 단순히 페이지 전체에 텍스트를 뿌리는 방식으로 구현
+                            pdf.multi_cell(w=width, h=12, txt=ocr_text, border=0, align='L')
+                            
+                            pdf.set_alpha(1) # 투명도 원상 복구
+                            
+                        except ClientError as e:
+                            logger.warning(f"OCR 텍스트 파일 로드 실패 ({ocr_key}): {e}")
+                        except Exception as e:
+                            logger.warning(f"OCR 텍스트 레이어 추가 중 오류 발생 ({ocr_key}): {e}")
                     
             except ClientError as e:
                 error_code = e.response.get('Error', {}).get('Code', 'Unknown')
