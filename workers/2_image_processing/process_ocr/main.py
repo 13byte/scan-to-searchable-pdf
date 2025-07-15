@@ -88,10 +88,11 @@ def handler(event, context):
         if response.error.message:
             raise Exception(f"Vision API 오류: {response.error.message}")
 
-        extracted_text = response.full_text_annotation.text
+        # full_text_annotation 객체를 JSON으로 변환 (바운딩 박스 정보 포함)
+        full_text_annotation_json = vision.AnnotateImageResponse.to_json(response)
         
-        ocr_output_key = f"ocr-results/{os.path.basename(image_key_for_ocr)}.txt"
-        s3_client.put_object(Bucket=temp_bucket, Key=ocr_output_key, Body=extracted_text.encode('utf-8'))
+        ocr_output_key = f"ocr-results/{os.path.basename(image_key_for_ocr)}.json"
+        s3_client.put_object(Bucket=temp_bucket, Key=ocr_output_key, Body=full_text_annotation_json.encode('utf-8'))
         
         logger.info(f"{image_key_for_ocr}에 대한 OCR 처리 성공, {ocr_output_key}에 저장됨.")
 
