@@ -16,32 +16,6 @@ resource "aws_lambda_layer_version" "pdf_dependencies" {
   depends_on = [null_resource.build_pdf_layer]
 }
 
-data "archive_file" "initialize_state" {
-  type        = "zip"
-  source_dir  = "${path.module}/../workers/1_orchestration/initialize_state"
-  output_path = "${path.module}/../dist/initialize_state.zip"
-}
-data "archive_file" "orchestrator" {
-  type        = "zip"
-  source_dir  = "${path.module}/../workers/1_orchestration/orchestrator"
-  output_path = "${path.module}/../dist/orchestrator.zip"
-}
-data "archive_file" "upscaler" {
-  type        = "zip"
-  source_dir  = "${path.module}/../workers/2_image_processing/upscaler"
-  output_path = "${path.module}/../dist/upscaler.zip"
-}
-data "archive_file" "pdf_generator" {
-  type        = "zip"
-  source_dir  = "${path.module}/../workers/3_finalization/pdf_generator"
-  output_path = "${path.module}/../dist/pdf_generator.zip"
-}
-data "archive_file" "summary_generator" {
-  type        = "zip"
-  source_dir  = "${path.module}/../workers/3_finalization/summary_generator"
-  output_path = "${path.module}/../dist/summary_generator.zip"
-}
-
 resource "aws_cloudwatch_log_group" "lambda_logs" {
   for_each = {
     initialize_state  = "initialize_state"
@@ -49,29 +23,14 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
     upscaler          = "upscaler"
     pdf_generator     = "pdf_generator"
     summary_generator = "summary_generator"
-    detect_skew        = "detect_skew"
-    process_ocr        = "process_ocr"
+    detect_skew       = "detect_skew"
+    process_ocr       = "process_ocr"
+    trigger_pipeline  = "trigger_pipeline"
   }
   name              = "/aws/lambda/${var.project_name}-${each.value}"
   retention_in_days = 7
 }
 
-resource "aws_lambda_function" "vision_api_handler" {
-  function_name = "${var.project_name}-vision-api-handler"
-  role          = aws_iam_role.lambda_fargate_base_role.arn
-  package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.vision_api_handler_lambda.repository_url}:${var.vision_lambda_image_tag}"
-  architectures = ["x86_64"]
-  timeout       = 120
-  memory_size   = 512  # 최적화: 1024→512MB, Google Vision API는 네트워크 호출 위주
-  environment {
-    variables = {
-      DYNAMODB_STATE_TABLE = aws_dynamodb_table.state_tracking.name
-      GOOGLE_SECRET_NAME   = aws_secretsmanager_secret.google_credentials.name
-    }
-  }
-  depends_on = [aws_cloudwatch_log_group.lambda_logs["vision_api_handler"]]
-}
 
 resource "aws_lambda_function" "initialize_state" {
   function_name    = "${var.project_name}-initialize-state"
@@ -167,4 +126,54 @@ resource "aws_lambda_function" "summary_generator" {
     }
   }
   depends_on = [aws_cloudwatch_log_group.lambda_logs["summary_generator"]]
+}
+
+resource "aws_lambda_function" "detect_skew" {
+  function_name    = "${var.project_name}-detect-skew"
+  role             = aws_iam_role.lambda_fargate_base_role.arn
+  package_type     = "Image"
+  image_uri        = "${aws_ecr_repository.detect_skew_lambda.repository_url}:${var.detect_skew_lambda_image_tag}"
+  architectures    = ["arm64"]
+  timeout          = 60
+  memory_size      = 256
+  environment {
+    variables = {
+      DYNAMODB_STATE_TABLE = aws_dynamodb_table.state_tracking.name
+      GOOGLE_SECRET_NAME   = aws_secretsmanager_secret.google_credentials.name
+    }
+  }
+  depends_on = [aws_cloudwatch_log_group.lambda_logs["detect_skew"]]
+}
+
+resource "aws_lambda_function" "process_ocr" {
+  function_name    = "${var.project_name}-process-ocr"
+  role             = aws_iam_role.lambda_fargate_base_role.arn
+  package_type     = "Image"
+  image_uri        = "${aws_ecr_repository.process_ocr_lambda.repository_url}:${var.process_ocr_lambda_image_tag}"
+  architectures    = ["arm64"]
+  timeout          = 120
+  memory_size      = 512
+  environment {
+    variables = {
+      DYNAMODB_STATE_TABLE = aws_dynamodb_table.state_tracking.name
+      GOOGLE_SECRET_NAME   = aws_secretsmanager_secret.google_credentials.name
+    }
+  }
+  depends_on = [aws_cloudwatch_log_group.lambda_logs["process_ocr"]]
+}
+
+resource "aws_lambda_function" "trigger_pipeline" {
+  function_name    = "${var.project_name}-trigger-pipeline"
+  role             = aws_iam_role.lambda_fargate_base_role.arn
+  package_type     = "Image"
+  image_uri        = "${aws_ecr_repository.trigger_pipeline_lambda.repository_url}:${var.trigger_pipeline_lambda_image_tag}"
+  architectures    = ["arm64"]
+  timeout          = 60
+  memory_size      = 256
+  environment {
+    variables = {
+      TEMP_BUCKET = aws_s3_bucket.temp.id
+    }
+  }
+  depends_on = [aws_cloudwatch_log_group.lambda_logs["trigger_pipeline"]]
 }
