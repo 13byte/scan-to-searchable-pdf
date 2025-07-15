@@ -2,11 +2,12 @@ resource "aws_sfn_state_machine" "book_scan_workflow" {
   name       = "${var.project_name}-main-workflow"
   role_arn   = aws_iam_role.step_functions_role.arn
   definition = templatefile("${path.module}/../step-functions/main-workflow.json", {
+    trigger_pipeline_lambda_arn = aws_lambda_function.trigger_pipeline.arn
     initialize_state_lambda_arn = aws_lambda_function.initialize_state.arn
     orchestrator_lambda_arn     = aws_lambda_function.orchestrator.arn
     
-    detect_skew_lambda_arn      = aws_lambda_function.vision_api_handler.arn
-    process_ocr_lambda_arn      = aws_lambda_function.vision_api_handler.arn
+    detect_skew_lambda_arn      = aws_lambda_function.detect_skew.arn
+    process_ocr_lambda_arn      = aws_lambda_function.process_ocr.arn
     upscale_image_lambda_arn    = aws_lambda_function.upscaler.arn
     fargate_task_arn            = aws_ecs_task_definition.skew_corrector.arn
 
@@ -27,9 +28,11 @@ resource "aws_sfn_state_machine" "book_scan_workflow" {
 
   depends_on = [
     aws_iam_role.step_functions_role,
+    aws_lambda_function.trigger_pipeline,
     aws_lambda_function.initialize_state,
     aws_lambda_function.orchestrator,
-    aws_lambda_function.vision_api_handler,
+    aws_lambda_function.detect_skew,
+    aws_lambda_function.process_ocr,
     aws_lambda_function.upscaler,
     aws_lambda_function.pdf_generator,
     aws_lambda_function.summary_generator,
