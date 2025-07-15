@@ -90,6 +90,7 @@ build_and_push() {
 
 build_and_push "fargate" "${PROJECT_NAME}-fargate-processor"
 build_and_push "sagemaker" "${PROJECT_NAME}-sagemaker-upscaler"
+build_and_push "workers/2_image_processing/vision_api_handler" "${PROJECT_NAME}/vision-api-handler"
 
 log_success "모든 Docker 이미지를 ECR에 성공적으로 푸시했습니다."
 
