@@ -182,11 +182,11 @@ def handler(event, context):
         
         # 한글 폰트 추가 (Lambda 레이어에 폰트 파일이 있어야 함)
         if os.path.exists(FONT_PATH):
-            pdf.add_font('NotoSansKR', '', FONT_PATH, uni=True)
+            pdf.add_font('NotoSansKR', '', FONT_PATH)
         else:
             logger.warning(f"폰트 파일이 없습니다: {FONT_PATH}. 한글 텍스트가 제대로 표시되지 않을 수 있습니다.")
             # 대체 폰트 또는 기본 폰트 사용
-            pdf.add_font('DejaVuSansCondensed', '', '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf', uni=True) # 예시
+            pdf.add_font('DejaVuSansCondensed', '', '/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf') # 예시
             pdf.set_font('DejaVuSansCondensed', '', 10)
 
 
@@ -210,21 +210,58 @@ def handler(event, context):
                     if not page_info['is_cover'] and ocr_key:
                         try:
                             ocr_obj = s3_client.get_object(Bucket=TEMP_BUCKET, Key=ocr_key)
-                            ocr_text = ocr_obj['Body'].read().decode('utf-8')
+                            ocr_json = json.loads(ocr_obj['Body'].read().decode('utf-8'))
                             
-                            # 텍스트 레이어 추가: 투명하게, 이미지와 동일한 위치에
-                            pdf.set_xy(0, 0) # 페이지의 왼쪽 상단으로 이동
-                            pdf.set_font('NotoSansKR', '', 10) # 폰트 설정
-                            pdf.set_text_color(0, 0, 0) # 텍스트 색상 (검정)
-                            pdf.set_alpha(0) # 투명도 0 (완전 투명)
-                            
-                            # 텍스트를 여러 줄로 나누어 추가 (간단한 예시, 실제 OCR 결과는 더 복잡할 수 있음)
-                            # 실제 OCR 결과의 바운딩 박스 정보를 활용하여 정확한 위치에 텍스트를 배치해야 함
-                            # 여기서는 단순히 페이지 전체에 텍스트를 뿌리는 방식으로 구현
-                            pdf.multi_cell(w=width, h=12, txt=ocr_text, border=0, align='L')
-                            
-                            pdf.set_alpha(1) # 투명도 원상 복구
-                            
+                            # Google Vision API 응답 구조에 따라 파싱
+                            # 여기서는 full_text_annotation의 pages[0]을 가정
+                            if 'fullTextAnnotation' in ocr_json and 'pages' in ocr_json['fullTextAnnotation'] and len(ocr_json['fullTextAnnotation']['pages']) > 0:
+                                page_annotation = ocr_json['fullTextAnnotation']['pages'][0]
+                                
+                                # 이미지 픽셀 좌표를 PDF 포인트 좌표로 변환하기 위한 스케일 팩터 계산
+                                # PDF 페이지 크기 (pt) / 이미지 픽셀 크기
+                                # fpdf2는 기본적으로 pt 단위를 사용하며, 1pt = 1/72인치
+                                # 이미지의 width, height는 픽셀 단위
+                                scale_x = pdf.w / width
+                                scale_y = pdf.h / height
+                                
+                                pdf.set_font('NotoSansKR', '', 10) # 폰트 설정
+                                pdf.set_text_color(0, 0, 0) # 텍스트 색상 (검정)
+                                pdf.set_alpha(0) # 투명도 0 (완전 투명)
+                                
+                                for block in page_annotation.get('blocks', []):
+                                    for paragraph in block.get('paragraphs', []):
+                                        for word in paragraph.get('words', []):
+                                            word_text = ''.join([symbol.get('text', '') for symbol in word.get('symbols', [])])
+                                            
+                                            if not word_text.strip():
+                                                continue
+                                                
+                                            # 바운딩 박스 좌표 추출 (x, y, width, height)
+                                            vertices = word['boundingBox']['vertices']
+                                            
+                                            # Google Vision API의 vertices는 [top_left, top_right, bottom_right, bottom_left] 순서
+                                            x_coords = [v['x'] for v in vertices]
+                                            y_coords = [v['y'] for v in vertices]
+                                            
+                                            min_x = min(x_coords)
+                                            max_x = max(x_coords)
+                                            min_y = min(y_coords)
+                                            max_y = max(y_coords)
+                                            
+                                            # 픽셀 좌표를 PDF 포인트 좌표로 변환
+                                            pdf_x = min_x * scale_x
+                                            pdf_y = min_y * scale_y
+                                            pdf_width = (max_x - min_x) * scale_x
+                                            pdf_height = (max_y - min_y) * scale_y
+                                            
+                                            # 텍스트를 바운딩 박스 위치에 정확히 그리기
+                                            # set_xy는 현재 위치를 설정하고, cell은 해당 위치에 텍스트를 그립니다.
+                                            # cell의 width와 height를 바운딩 박스 크기로 설정하여 텍스트가 해당 영역에만 그려지도록 합니다.
+                                            pdf.set_xy(pdf_x, pdf_y)
+                                            pdf.cell(w=pdf_width, h=pdf_height, text=word_text, border=0, align='C') # align='C'는 중앙 정렬
+                                
+                                pdf.set_alpha(1) # 투명도 원상 복구
+                                
                         except ClientError as e:
                             logger.warning(f"OCR 텍스트 파일 로드 실패 ({ocr_key}): {e}")
                         except Exception as e:
