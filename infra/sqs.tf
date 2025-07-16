@@ -72,7 +72,23 @@ output "dlq_arn" {
   value       = aws_sqs_queue.dlq.arn
 }
 
-output "retry_queue_url" {
-  description = "Retry Queue URL"
-  value       = aws_sqs_queue.retry_queue.id
+resource "aws_sqs_queue_policy" "dlq_policy" {
+  queue_url = aws_sqs_queue.dlq.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        },
+        Action = [
+          "sqs:SendMessage",
+          "sqs:ReceiveMessage" # 이벤트 소스 매핑을 위해 추가
+        ],
+        Resource = aws_sqs_queue.dlq.arn
+      }
+    ]
+  })
 }
