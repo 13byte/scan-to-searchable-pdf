@@ -127,10 +127,7 @@ resource "aws_iam_policy" "base_policy" {
           "sqs:GetQueueAttributes",
           "sqs:GetQueueUrl" # 추가
         ],
-        Resource = [
-          aws_sqs_queue.dlq.arn,
-          aws_sqs_queue.retry_queue.arn # retry_queue도 추가
-        ]
+        Resource = "*"
       }
     ]
   })
