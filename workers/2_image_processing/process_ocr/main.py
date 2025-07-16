@@ -5,6 +5,9 @@ import logging
 from datetime import datetime
 from google.cloud import vision
 from google.oauth2 import service_account
+from secrets_cache import get_cached_secret
+
+import time
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -12,6 +15,7 @@ logger.setLevel(logging.INFO)
 s3_client = boto3.client('s3')
 secrets_client = boto3.client('secretsmanager')
 dynamodb = boto3.resource('dynamodb')
+cloudwatch_client = boto3.client('cloudwatch')
 
 DYNAMODB_TABLE_NAME = os.environ['DYNAMODB_STATE_TABLE']
 GOOGLE_SECRET_NAME = os.environ.get('GOOGLE_SECRET_NAME')
@@ -20,12 +24,13 @@ MAX_RETRIES = 3
 vision_client = None
 
 def get_vision_client():
-    """Google Vision 클라이언트를 초기화하고 캐시합니다."""
+    """Google Vision 클라이언트 보안 캐싱 초기화"""
     global vision_client
     if vision_client is None:
-        logger.info("Google Vision 클라이언트 초기화.")
-        secret = secrets_client.get_secret_value(SecretId=GOOGLE_SECRET_NAME)
-        credentials = json.loads(secret['SecretString'])
+        logger.info("Vision 클라이언트 보안 캐싱 초기화")
+        credentials = get_cached_secret(GOOGLE_SECRET_NAME)
+        if not credentials:
+            raise Exception("Google 자격 증명 가져오기 실패")
         creds = service_account.Credentials.from_service_account_info(credentials)
         vision_client = vision.ImageAnnotatorClient(credentials=creds)
     return vision_client
@@ -79,6 +84,7 @@ def handler(event, context):
 
     update_job_status(run_id, image_key, 'PROCESSING')
 
+    start_time = time.time()
     try:
         client = get_vision_client()
         image_content = s3_client.get_object(Bucket=temp_bucket, Key=image_key_for_ocr)['Body'].read()
@@ -98,6 +104,25 @@ def handler(event, context):
 
         result = {'ocr_output_key': ocr_output_key}
         update_job_status(run_id, image_key, 'COMPLETED', output=result)
+        
+        end_time = time.time()
+        processing_latency = (end_time - start_time) * 1000
+        cloudwatch_client.put_metric_data(
+            Namespace='BookScan/Processing',
+            MetricData=[
+                {
+                    'MetricName': 'ProcessingLatency',
+                    'Dimensions': [
+                        {'Name': 'RunId', 'Value': run_id},
+                        {'Name': 'ImageKey', 'Value': image_key}
+                    ],
+                    'Value': processing_latency,
+                    'Unit': 'Milliseconds'
+                }
+            ]
+        )
+        logger.info(f"ProcessingLatency: {processing_latency:.2f}ms")
+        
         return result
 
     except Exception as e:
