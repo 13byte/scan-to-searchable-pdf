@@ -32,7 +32,7 @@ resource "aws_cloudwatch_metric_alarm" "secrets_cache_miss_rate" {
 
 resource "aws_cloudwatch_log_metric_filter" "vision_api_quota_exceeded" {
   name           = "${var.project_name}-vision-api-quota"
-  log_group_name = "/aws/lambda/${var.project_name}-detect-skew"
+  log_group_name = aws_cloudwatch_log_group.lambda_logs["detect_skew"].name
   pattern        = "[timestamp, request_id, level=\"ERROR\", message=\"*quota*\"]"
 
   metric_transformation {
