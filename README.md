@@ -7,7 +7,7 @@
 - **자동화된 이미지 처리**: Google Vision API와 AWS 서비스 완전 자동 처리
 - **비용 최적화**: SageMaker 서버리스 사용량 기반 과금
 - **고품질 출력**: Real-ESRGAN 업스케일링과 OCR
-- **안정적인 처리**: DynamoDB 상태 추적 및 자동 재시도
+- **안정적인 처리**: DynamoDB 상태 추적, TTL 기반 데이터 자동 정리, 우선순위 기반 처리 및 자동 재시도
 - **DLQ 기반 장애 복구**: 실패 메시지 자동 처리 및 알림
 
 ## 처리 과정
@@ -19,10 +19,10 @@
 ## 아키텍처 개선사항
 
 - **워크플로우**: AWS Step Functions 오케스트레이션
-- **상태 관리**: DynamoDB GSI 최적화로 쿼리 성능 30% 향상
-- **병렬 처리**: 동적 배치 크기 조정으로 최대 50개 이미지 동시 처리
-- **내결함성**: DLQ 기반 자동 재시도 및 복구
-- **모니터링**: X-Ray 트레이싱 및 CloudWatch 메트릭
+- **상태 관리**: DynamoDB GSI 최적화로 쿼리 성능 향상 및 TTL을 통한 데이터 자동 정리
+- **병렬 처리**: 동적 배치 크기 조정으로 최대 50개 이미지 동시 처리 (환경 변수 `MAX_BATCH_SIZE`, `MIN_BATCH_SIZE`로 설정 가능)
+- **내결함성**: DLQ 기반 자동 재시도 및 복구, ECR 이미지 태그 불변성(`IMMUTABLE`) 설정으로 배포 일관성 확보
+- **모니터링**: X-Ray 트레이싱, CloudWatch 메트릭(처리 지연, Secrets Cache 미스율), Vision API 할당량 초과 알람
 
 ## 시작하기
 
@@ -115,8 +115,8 @@ AWS Step Functions 콘솔에서 실행:
 ## 모니터링
 
 - DLQ 기반 장애 처리
-- SNS 실시간 알림
-- CloudWatch 메트릭
+- SNS 실시간 알림 (처리 지연, Secrets Cache 미스율, Vision API 할당량 초과 등)
+- CloudWatch 메트릭 (ProcessingLatency, SecretsCacheMissRate, SecretsFetchLatency)
 - X-Ray 트레이싱
 
 ## 표지 페이지
