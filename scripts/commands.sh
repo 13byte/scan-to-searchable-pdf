@@ -31,14 +31,14 @@ build_and_push() {
   log_info "Building and pushing image to '${ecr_repo_uri}:${image_tag}'..."
   aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com" >&2
   
-  # SageMaker/Lambda 호환성을 위한 Direct Registry Push
-  DOCKER_BUILDKIT=1 docker buildx build \
-    --platform ${platform_arg#--platform } \
-    --provenance=false \
-    --output type=image,push=true,oci-mediatypes=false \
+  # Lambda 매니페스트 호환성을 위한 레거시 빌더 사용
+  DOCKER_BUILDKIT=0 docker build \
+    ${platform_arg} \
     -t "${ecr_repo_uri}:${image_tag}" \
     -f "${dockerfile_path}" \
     "${context_path}" >&2
+    
+  docker push "${ecr_repo_uri}:${image_tag}" >&2
     
   log_success "Image push complete: ${ecr_repo_uri}:${image_tag}"
   echo "$image_tag"

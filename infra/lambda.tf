@@ -15,7 +15,6 @@ data "archive_file" "summary_generator" {
   source_dir  = "${path.module}/../workers/3_finalization/summary_generator"
   output_path = "${path.module}/../dist/summary_generator.zip"
 }
-}
 
 resource "aws_cloudwatch_log_group" "lambda_logs" {
   for_each = {

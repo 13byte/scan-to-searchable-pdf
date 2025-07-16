@@ -3,9 +3,7 @@ import json
 import boto3
 from boto3.dynamodb.conditions import Key
 from aws_lambda_powertools.utilities.typing import LambdaContext
-from aws_lambda_powertools.logging import Logger
-from aws_lambda_powertools.metrics import Metrics
-from aws_lambda_powertools.tracer import Tracer
+from aws_lambda_powertools import Logger, Tracer, Metrics
 from datetime import datetime
 import backoff
 from typing import Dict, List, Any

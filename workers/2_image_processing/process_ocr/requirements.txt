@@ -2,3 +2,5 @@ boto3
 google-cloud-vision
 google-auth-oauthlib
 google-api-python-client
+aws-lambda-powertools==3.17.0
+backoff>=2.2.0

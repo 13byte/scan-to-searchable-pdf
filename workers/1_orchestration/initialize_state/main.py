@@ -4,9 +4,7 @@ import boto3
 from datetime import datetime, timedelta
 
 from aws_lambda_powertools.utilities.typing import LambdaContext
-from aws_lambda_powertools.logging import Logger
-from aws_lambda_powertools.metrics import Metrics
-from aws_lambda_powertools.tracer import Tracer
+from aws_lambda_powertools import Logger, Metrics, Tracer
 
 logger = Logger()
 metrics = Metrics()
