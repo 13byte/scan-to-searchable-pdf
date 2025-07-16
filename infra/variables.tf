@@ -37,7 +37,7 @@ variable "process_ocr_lambda_image_tag" {
 variable "trigger_pipeline_lambda_image_tag" {
   description = "Trigger Pipeline Lambda 컨테이너 이미지 태그."
   type        = string
-  default     = "v1"
+  default     = "latest"
 }
 
 variable "sagemaker_image_tag" {
