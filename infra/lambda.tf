@@ -132,7 +132,9 @@ resource "aws_lambda_function" "upscaler" {
     target_arn = aws_sqs_queue.dlq.arn
   }
 
-  depends_on = [aws_cloudwatch_log_group.lambda_logs["upscaler"]]
+  depends_on = [aws_cloudwatch_log_group.lambda_logs["upscaler"],
+    aws_sagemaker_endpoint.realesrgan # 명시적 의존성 추가
+  ]
 }
 
 resource "aws_lambda_function" "pdf_generator" {
@@ -214,7 +216,9 @@ resource "aws_lambda_function" "detect_skew" {
     target_arn = aws_sqs_queue.dlq.arn
   }
 
-  depends_on = [aws_cloudwatch_log_group.lambda_logs["detect_skew"]]
+  depends_on = [aws_cloudwatch_log_group.lambda_logs["detect_skew"],
+    aws_sagemaker_endpoint.realesrgan # 명시적 의존성 추가
+  ]
 }
 
 resource "aws_lambda_function" "process_ocr" {
@@ -244,7 +248,9 @@ resource "aws_lambda_function" "process_ocr" {
     target_arn = aws_sqs_queue.dlq.arn
   }
 
-  depends_on = [aws_cloudwatch_log_group.lambda_logs["process_ocr"]]
+  depends_on = [aws_cloudwatch_log_group.lambda_logs["process_ocr"],
+    aws_sagemaker_endpoint.realesrgan # 명시적 의존성 추가
+  ]
 }
 
 resource "aws_lambda_function" "trigger_pipeline" {

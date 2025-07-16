@@ -60,6 +60,10 @@ resource "aws_lambda_event_source_mapping" "dlq_trigger" {
   event_source_arn = aws_sqs_queue.dlq.arn
   function_name    = aws_lambda_function.dlq_processor.arn
   batch_size       = 10
+
+  depends_on = [
+    aws_sagemaker_endpoint.realesrgan # 명시적 의존성 추가
+  ]
 }
 
 output "dlq_url" {
