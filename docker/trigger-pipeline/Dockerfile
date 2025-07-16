@@ -20,4 +20,4 @@ RUN pip install uv && uv pip install --system --no-cache -r requirements.txt
 COPY main.py ${LAMBDA_TASK_ROOT}/lambda_function.py
 
 # Set the default Lambda handler
-CMD ["lambda_function.lambda_handler"]
+CMD ["lambda_function.handler"]
