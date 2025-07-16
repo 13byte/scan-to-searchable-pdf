@@ -4,11 +4,10 @@
 
 ## 주요 기능
 
-- **자동화된 이미지 처리**: Google Vision API와 AWS 서비스 완전 자동 처리
-- **비용 최적화**: SageMaker 서버리스 사용량 기반 과금
+- **자동화된 이미지 처리**: Google Vision 클라이언트 캐싱으로 최적화된 처리
+- **성능 최적화**: SageMaker 엔드포인트 워밍업, DynamoDB 샤드 분산, 메모리 기반 배치 조정
 - **고품질 출력**: Real-ESRGAN 업스케일링과 OCR
-- **안정적인 처리**: DynamoDB 상태 추적, TTL 기반 데이터 자동 정리, 우선순위 기반 처리 및 자동 재시도
-- **DLQ 기반 장애 복구**: 실패 메시지 자동 처리 및 알림
+- **안정적인 처리**: DLQ 기반 자동 재시도 및 복구
 
 ## 처리 과정
 
@@ -16,13 +15,13 @@
 스캔 이미지 (S3) → 기울기 감지 → 각도 보정 → 업스케일링 → OCR → PDF 생성
 ```
 
-## 아키텍처 개선사항
+## 아키텍처
 
 - **워크플로우**: AWS Step Functions 오케스트레이션
-- **상태 관리**: DynamoDB GSI 최적화로 쿼리 성능 향상 및 TTL을 통한 데이터 자동 정리, 표지 이미지 스킵 카운트 및 우선순위 기반 처리
-- **병렬 처리**: 동적 배치 크기 조정으로 최대 50개 이미지 동시 처리 (환경 변수 `MAX_BATCH_SIZE`, `MIN_BATCH_SIZE`로 설정 가능)
-- **내결함성**: DLQ 기반 자동 재시도 및 복구, ECR 이미지 태그 가변성(`MUTABLE`) 설정으로 개발 편의성 확보
-- **모니터링**: X-Ray 트레이싱, CloudWatch 메트릭(처리 지연, Secrets Cache 미스율), Vision API 할당량 초과 알람, `aws-lambda-powertools`를 통한 통합 로깅/메트릭/트레이싱
+- **상태 관리**: DynamoDB 샤드 분산, TTL 자동 정리
+- **병렬 처리**: 메모리 기반 동적 배치 조정 (5-50개)
+- **내결함성**: DLQ 자동 재시도 및 복구
+- **모니터링**: X-Ray 트레이싱, CloudWatch 메트릭
 
 ## 시작하기
 
@@ -84,11 +83,11 @@ AWS Step Functions 콘솔에서 실행:
 ## 비용 (50개 이미지 기준)
 
 - SageMaker 서버리스: $1.30-2.00
-- Lambda 함수들: $0.50-0.70  
+- Lambda 함수들: $0.40-0.60  
 - Fargate 태스크: $0.67
 - DynamoDB: $0.01
 - Google Vision API: $0.15
-- **총 비용**: **$2.63-3.53**
+- **총 비용**: **$2.53-3.43**
 
 ## 기술 스택
 
@@ -112,13 +111,6 @@ AWS Step Functions 콘솔에서 실행:
 | `./run.sh start` | 이미지 처리 작업 시작 |
 | `./run.sh clean` | 빌드 파일 정리 |
 
-## 모니터링
-
-- DLQ 기반 장애 처리
-- SNS 실시간 알림 (처리 지연, Secrets Cache 미스율, Vision API 할당량 초과 등)
-- CloudWatch 메트릭 (ProcessingLatency, SecretsCacheMissRate, SecretsFetchLatency)
-- X-Ray 트레이싱
-
 ## 표지 페이지
 
 - `~.jpg`: 앞표지
@@ -131,9 +123,8 @@ AWS Step Functions 콘솔에서 실행:
 1. **AWS 인증 실패**: `aws configure`
 2. **Docker 권한 오류**: `sudo usermod -aG docker $USER`
 3. **Google API 오류**: 서비스 계정 키 및 Vision API 활성화 확인
-4. **메모리 부족**: `MAX_BATCH_SIZE` 환경변수 조정
+4. **처리 지연**: CloudWatch 메트릭 확인 및 배치 크기 자동 조정
 5. **테스트 실패**: `./run.sh test` 실행 후 오류 로그 확인
-6. **Docker 빌드 오류**: `scripts/commands.sh`에서 `docker build` 컨텍스트 및 Dockerfile `COPY` 경로 확인
 
 ## 리소스 삭제
 
