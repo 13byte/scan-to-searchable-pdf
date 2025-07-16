@@ -26,17 +26,35 @@ DYNAMODB_TABLE_NAME = os.environ['DYNAMODB_STATE_TABLE']
 GOOGLE_SECRET_NAME = os.environ.get('GOOGLE_SECRET_NAME')
 MAX_RETRIES = 3
 
-vision_client = None
+import functools
 
+vision_client = None
+credentials_cache = {}
+last_refresh = 0
+CACHE_TTL = 3600  # 1시간
+
+@functools.lru_cache(maxsize=1)
 def get_vision_client():
-    """Google Vision 클라이언트 보안 캐싱 초기화"""
-    global vision_client
-    if vision_client is None:
-        logger.info("Vision 클라이언트 보안 캐싱 초기화")
+    """싱글톤 Vision 클라이언트 with 캐시된 자격증명"""
+    global vision_client, credentials_cache, last_refresh
+    
+    current_time = time.time()
+    
+    if (vision_client is None or 
+        current_time - last_refresh > CACHE_TTL):
+        
+        logger.info("Vision 클라이언트 초기화/갱신")
         start_time = time.time()
-        credentials = get_cached_secret(GOOGLE_SECRET_NAME)
+        
+        if GOOGLE_SECRET_NAME not in credentials_cache or current_time - last_refresh > CACHE_TTL:
+            credentials = get_cached_secret(GOOGLE_SECRET_NAME)
+            credentials_cache[GOOGLE_SECRET_NAME] = credentials
+            last_refresh = current_time
+            cache_miss = 1
+        else:
+            cache_miss = 0
+            
         end_time = time.time()
-        cache_miss = 1 if credentials is None else 0
         cloudwatch_client.put_metric_data(
             Namespace='BookScan/Security',
             MetricData=[

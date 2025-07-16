@@ -105,7 +105,7 @@ resource "aws_lambda_function" "upscaler" {
   runtime                        = "python3.12"
   architectures                  = ["arm64"]
   timeout                        = 300
-  memory_size                    = 768
+  memory_size                    = 1024
   reserved_concurrent_executions = 25
   filename                       = data.archive_file.upscaler.output_path
   source_code_hash               = data.archive_file.upscaler.output_base64sha256
@@ -189,7 +189,7 @@ resource "aws_lambda_function" "detect_skew" {
   image_uri                      = "${aws_ecr_repository.detect_skew_lambda.repository_url}:${var.detect_skew_lambda_image_tag}"
   architectures                  = ["arm64"]
   timeout                        = 30
-  memory_size                    = 1024
+  memory_size                    = 512
   reserved_concurrent_executions = 50
 
   environment {
@@ -219,7 +219,7 @@ resource "aws_lambda_function" "process_ocr" {
   image_uri                      = "${aws_ecr_repository.process_ocr_lambda.repository_url}:${var.process_ocr_lambda_image_tag}"
   architectures                  = ["arm64"]
   timeout                        = 60
-  memory_size                    = 2048
+  memory_size                    = 1024
   reserved_concurrent_executions = 30
 
   environment {

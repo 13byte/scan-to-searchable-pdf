@@ -24,6 +24,18 @@ resource "aws_dynamodb_table" "state_tracking" {
     type = "N"
   }
 
+  attribute {
+    name = "shard_id"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "shard-status-index"
+    hash_key        = "shard_id"
+    range_key       = "job_status"
+    projection_type = "ALL"
+  }
+
   global_secondary_index {
     name            = "status-priority-index"
     hash_key        = "job_status"

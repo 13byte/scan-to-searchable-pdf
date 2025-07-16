@@ -23,10 +23,17 @@ EVENT_BUS_NAME = os.environ['EVENT_BUS_NAME']
 MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '50'))
 MIN_BATCH_SIZE = int(os.environ.get('MIN_BATCH_SIZE', '5'))
 
+import psutil
+
 @tracer.capture_method
 def calculate_dynamic_batch_size(run_id: str) -> int:
-    """CloudWatch 메트릭 기반 배치 크기 계산"""
+    """메모리 사용량 및 CloudWatch 메트릭 기반 배치 크기 계산"""
     try:
+        # 메모리 사용량 확인
+        memory_info = psutil.virtual_memory()
+        memory_percent = memory_info.percent
+        
+        # CloudWatch 메트릭 조회
         response = cloudwatch.get_metric_statistics(
             Namespace='BookScan/Processing',
             MetricName='ProcessingLatency',
@@ -39,15 +46,53 @@ def calculate_dynamic_batch_size(run_id: str) -> int:
             Statistics=['Average']
         )
         
+        # 기본 배치 크기 계산
         if not response['Datapoints']:
-            return MIN_BATCH_SIZE
-            
-        avg_latency = response['Datapoints'][-1]['Average']
+            base_size = MIN_BATCH_SIZE
+        else:
+            avg_latency = response['Datapoints'][-1]['Average']
+            if avg_latency > 60:
+                base_size = MIN_BATCH_SIZE
+            elif avg_latency < 10:
+                base_size = MAX_BATCH_SIZE
+            else:
+                factor = (60 - avg_latency) / 50
+                base_size = MIN_BATCH_SIZE + int((MAX_BATCH_SIZE - MIN_BATCH_SIZE) * factor)
         
-        if avg_latency > 60:
-            batch_size = MIN_BATCH_SIZE
-        elif avg_latency < 10:
-            batch_size = MAX_BATCH_SIZE
+        # 메모리 사용량 기반 조정
+        if memory_percent > 80:
+            batch_size = max(MIN_BATCH_SIZE, base_size // 2)
+        elif memory_percent > 60:
+            batch_size = max(MIN_BATCH_SIZE, int(base_size * 0.7))
+        elif memory_percent < 30:
+            batch_size = min(MAX_BATCH_SIZE, int(base_size * 1.3))
+        else:
+            batch_size = base_size
+            
+        # 메모리 메트릭 기록
+        cloudwatch.put_metric_data(
+            Namespace='BookScan/Processing',
+            MetricData=[
+                {
+                    'MetricName': 'MemoryUsagePercent',
+                    'Dimensions': [
+                        {'Name': 'RunId', 'Value': run_id}
+                    ],
+                    'Value': memory_percent,
+                    'Unit': 'Percent'
+                },
+                {
+                    'MetricName': 'BatchSizeAdjusted',
+                    'Dimensions': [
+                        {'Name': 'RunId', 'Value': run_id}
+                    ],
+                    'Value': batch_size,
+                    'Unit': 'Count'
+                }
+            ]
+        )
+        
+        return max(MIN_BATCH_SIZE, min(MAX_BATCH_SIZE, batch_size))
         else:
             factor = (60 - avg_latency) / 50
             batch_size = MIN_BATCH_SIZE + int((MAX_BATCH_SIZE - MIN_BATCH_SIZE) * factor)
@@ -67,28 +112,53 @@ def calculate_dynamic_batch_size(run_id: str) -> int:
     logger=logger
 )
 def query_pending_tasks(run_id: str, batch_size: int) -> List[Dict[str, Any]]:
-    """DynamoDB에서 처리 대기 중인 이미지 목록을 가져옵니다 (지수 백오프 적용)."""
+    """DynamoDB 샤딩을 통한 분산 쿼리로 처리 대기 이미지 목록 가져오기"""
     state_table = dynamodb.Table(DYNAMODB_TABLE_NAME)
     
-    # 'INITIALIZED' 상태의 이미지 가져오기
-    initialized_response = state_table.query(
-        IndexName='run-status-index', # infra/dynamodb.tf에 정의된 인덱스 사용
-        KeyConditionExpression=Key('run_id').eq(run_id) & Key('job_status').eq('INITIALIZED')
-    )
-    initialized_images = [item for item in initialized_response.get('Items', []) if not item.get('is_cover', False)]
+    # 샤드 기반 분산 쿼리
+    shard_count = min(10, batch_size // 5 + 1)  # 동적 샤드 수
+    all_images = []
     
-    # 'FAILED' 상태의 이미지 가져오기 (재처리 대상)
-    failed_response = state_table.query(
-        IndexName='run-status-index',
-        KeyConditionExpression=Key('run_id').eq(run_id) & Key('job_status').eq('FAILED')
-    )
-    failed_images = [item for item in failed_response.get('Items', []) if not item.get('is_cover', False)]
-
-    # 두 목록을 합치고 priority 순으로 정렬
-    images_to_process = sorted(initialized_images + failed_images, key=lambda x: x.get('priority', 0))
+    for shard_index in range(shard_count):
+        shard_id = f"{run_id}#{shard_index}"
+        
+        try:
+            # 샤드별 INITIALIZED 상태 이미지
+            shard_response = state_table.query(
+                IndexName='shard-status-index',
+                KeyConditionExpression=Key('shard_id').eq(shard_id) & Key('job_status').eq('INITIALIZED'),
+                Limit=batch_size // shard_count + 1
+            )
+            all_images.extend([item for item in shard_response.get('Items', []) if not item.get('is_cover', False)])
+            
+            # 샤드별 FAILED 상태 이미지
+            failed_response = state_table.query(
+                IndexName='shard-status-index',
+                KeyConditionExpression=Key('shard_id').eq(shard_id) & Key('job_status').eq('FAILED'),
+                Limit=batch_size // shard_count + 1
+            )
+            all_images.extend([item for item in failed_response.get('Items', []) if not item.get('is_cover', False)])
+            
+        except Exception as e:
+            logger.warning(f"샤드 {shard_id} 쿼리 실패: {e}")
+            continue
     
-    # 배치 크기만큼만 반환
-    return images_to_process[:batch_size]
+    # 백업: 기존 run-status-index 사용
+    if not all_images:
+        logger.info("샤드 쿼리 실패, 기존 인덱스 사용")
+        initialized_response = state_table.query(
+            IndexName='run-status-index',
+            KeyConditionExpression=Key('run_id').eq(run_id) & Key('job_status').eq('INITIALIZED')
+        )
+        failed_response = state_table.query(
+            IndexName='run-status-index', 
+            KeyConditionExpression=Key('run_id').eq(run_id) & Key('job_status').eq('FAILED')
+        )
+        all_images = ([item for item in initialized_response.get('Items', []) if not item.get('is_cover', False)] +
+                     [item for item in failed_response.get('Items', []) if not item.get('is_cover', False)])
+    
+    # 우선순위 정렬 후 배치 크기만큼 반환
+    return sorted(all_images, key=lambda x: x.get('priority', 0))[:batch_size]
 
 @tracer.capture_method
 def get_workflow_status(run_id: str) -> Dict[str, Any]:
