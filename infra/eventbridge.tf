@@ -12,8 +12,8 @@ resource "aws_cloudwatch_event_rule" "orchestration_trigger" {
   description    = "오케스트레이션 트리거 규칙"
 
   event_pattern = jsonencode({
-    source        = ["book-scan.orchestration"]
-    detail-type   = ["Batch Processing Complete"]
+    source      = ["book-scan.orchestration"]
+    detail-type = ["Batch Processing Complete"]
     detail = {
       status = ["COMPLETED"]
     }
@@ -57,8 +57,8 @@ resource "aws_cloudwatch_event_rule" "batch_completion" {
   description    = "배치 완료 감지 규칙"
 
   event_pattern = jsonencode({
-    source        = ["book-scan.processing"]
-    detail-type   = ["Image Processing Complete"]
+    source      = ["book-scan.processing"]
+    detail-type = ["Image Processing Complete"]
     detail = {
       batch_complete = [true]
     }
