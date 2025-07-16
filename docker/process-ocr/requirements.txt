@@ -1,8 +1,6 @@
 google-cloud-vision==3.10.2
 google-auth==2.29.0
 google-api-core==2.19.0
-grpcio==1.62.2
-grpcio-status==1.62.2
 googleapis-common-protos==1.63.0
 protobuf==4.25.3
 requests==2.31.0
