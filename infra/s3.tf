@@ -70,4 +70,15 @@ resource "aws_s3_bucket_versioning" "output" {
   }
 }
 
-# Lifecycle 정책 제거: aws-nuke로 리소스 정리 예정
+resource "aws_s3_bucket_lifecycle_configuration" "temp_bucket_lifecycle" {
+  bucket = aws_s3_bucket.temp.id
+
+  rule {
+    id     = "temp_files_expiration"
+    status = "Enabled"
+
+    expiration {
+      days = 7 # 7일 후 임시 파일 삭제
+    }
+  }
+}

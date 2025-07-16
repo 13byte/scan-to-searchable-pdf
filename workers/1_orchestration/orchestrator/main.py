@@ -1,14 +1,18 @@
-import boto3
 import os
-import logging
 import json
-import math
+import boto3
+from boto3.dynamodb.conditions import Key
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools.logging import Logger
+from aws_lambda_powertools.metrics import Metrics
+from aws_lambda_powertools.tracer import Tracer
 from datetime import datetime
-from typing import Dict, List, Any
 import backoff
+from typing import Dict, List, Any
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger = Logger()
+metrics = Metrics()
+tracer = Tracer()
 
 dynamodb = boto3.resource('dynamodb')
 events_client = boto3.client('events')
@@ -16,10 +20,10 @@ cloudwatch = boto3.client('cloudwatch')
 
 DYNAMODB_TABLE_NAME = os.environ['DYNAMODB_STATE_TABLE']
 EVENT_BUS_NAME = os.environ['EVENT_BUS_NAME']
-STATUS_INDEX_NAME = 'status-index'
 MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '50'))
 MIN_BATCH_SIZE = int(os.environ.get('MIN_BATCH_SIZE', '5'))
 
+@tracer.capture_method
 def calculate_dynamic_batch_size(run_id: str) -> int:
     """CloudWatch 메트릭 기반 배치 크기 계산"""
     try:
@@ -63,21 +67,49 @@ def calculate_dynamic_batch_size(run_id: str) -> int:
     logger=logger
 )
 def query_pending_tasks(run_id: str, batch_size: int) -> List[Dict[str, Any]]:
-    """DynamoDB 쿼리 (지수 백오프 적용)"""
+    """DynamoDB에서 처리 대기 중인 이미지 목록을 가져옵니다 (지수 백오프 적용)."""
     state_table = dynamodb.Table(DYNAMODB_TABLE_NAME)
     
-    response = state_table.query(
-        IndexName=STATUS_INDEX_NAME,
-        KeyConditionExpression='run_id = :rid AND job_status = :j_status',
-        ExpressionAttributeValues={
-            ':rid': run_id,
-            ':j_status': 'PENDING'
-        },
-        Limit=batch_size
+    # 'INITIALIZED' 상태의 이미지 가져오기
+    initialized_response = state_table.query(
+        IndexName='run-status-index', # infra/dynamodb.tf에 정의된 인덱스 사용
+        KeyConditionExpression=Key('run_id').eq(run_id) & Key('job_status').eq('INITIALIZED')
     )
+    initialized_images = [item for item in initialized_response.get('Items', []) if not item.get('is_cover', False)]
     
-    return response.get('Items', [])
+    # 'FAILED' 상태의 이미지 가져오기 (재처리 대상)
+    failed_response = state_table.query(
+        IndexName='run-status-index',
+        KeyConditionExpression=Key('run_id').eq(run_id) & Key('job_status').eq('FAILED')
+    )
+    failed_images = [item for item in failed_response.get('Items', []) if not item.get('is_cover', False)]
 
+    # 두 목록을 합치고 priority 순으로 정렬
+    images_to_process = sorted(initialized_images + failed_images, key=lambda x: x.get('priority', 0))
+    
+    # 배치 크기만큼만 반환
+    return images_to_process[:batch_size]
+
+@tracer.capture_method
+def get_workflow_status(run_id: str) -> Dict[str, Any]:
+    """워크플로우 전체 상태를 DynamoDB에서 가져옵니다."""
+    state_table = dynamodb.Table(DYNAMODB_TABLE_NAME)
+    response = state_table.get_item(
+        Key={'run_id': run_id, 'image_key': 'workflow_status'}
+    )
+    return response.get('Item', {})
+
+@tracer.capture_method
+def update_image_status(run_id: str, image_key: str, status: str):
+    """이미지 상태를 DynamoDB에 업데이트합니다."""
+    state_table = dynamodb.Table(DYNAMODB_TABLE_NAME)
+    state_table.update_item(
+        Key={'run_id': run_id, 'image_key': image_key},
+        UpdateExpression="SET job_status = :status",
+        ExpressionAttributeValues={':status': status}
+    )
+
+@tracer.capture_method
 def publish_completion_event(run_id: str, is_complete: bool):
     """EventBridge 완료 이벤트 발행"""
     try:
@@ -98,57 +130,84 @@ def publish_completion_event(run_id: str, is_complete: bool):
     except Exception as e:
         logger.warning(f"이벤트 발행 실패: {e}")
 
-def handler(event, context):
-    """오케스트레이션 함수"""
-    run_id = event['run_id']
+@logger.inject_lambda_context(log_event=True)
+@metrics.log_metrics(capture_cold_start_metric=True)
+@tracer.capture_lambda_handler
+def handler(event: dict, context: LambdaContext) -> dict:
+    run_id = event.get('run_id')
+    input_bucket = event.get('input_bucket')
+    temp_bucket = event.get('temp_bucket')
+    output_bucket = event.get('output_bucket')
     
-    logger.info(f"run_id {run_id} 오케스트레이션 시작")
+    if not run_id:
+        logger.error("run_id가 제공되지 않았습니다.")
+        raise ValueError("run_id는 필수입니다.")
 
     try:
+        workflow_status_item = get_workflow_status(run_id)
+        total_initialized_images = workflow_status_item.get('total_images', 0)
+        
         batch_size = calculate_dynamic_batch_size(run_id)
-        logger.info(f"배치 크기: {batch_size}")
+        logger.info(f"run_id {run_id} 오케스트레이션 시작. 배치 크기: {batch_size}")
         
-        tasks = query_pending_tasks(run_id, batch_size)
+        tasks_to_process = query_pending_tasks(run_id, batch_size)
         
-        if not tasks:
-            logger.info("처리할 작업 없음")
-            publish_completion_event(run_id, True)
-            return {
-                "is_work_done": True,
-                "batch_to_process": []
-            }
+        if not tasks_to_process:
+            # 처리할 작업이 없는 경우, 모든 이미지가 처리되었는지 확인
+            processed_count_response = dynamodb.Table(DYNAMODB_TABLE_NAME).query(
+                IndexName='run-status-index',
+                KeyConditionExpression=Key('run_id').eq(run_id) & Key('job_status').eq('PROCESSED')
+            )
+            processed_images = [item for item in processed_count_response.get('Items', []) if not item.get('is_cover', False)]
+            
+            if len(processed_images) == total_initialized_images - workflow_status_item.get('skipped_images', 0): # 스킵된 이미지 수 고려
+                logger.info("모든 이미지가 성공적으로 처리되었습니다. PDF 생성을 시작합니다.")
+                publish_completion_event(run_id, True)
+                return {
+                    'run_id': run_id,
+                    'is_work_done': True,
+                    'batch_to_process': None,
+                    'input_bucket': input_bucket,
+                    'temp_bucket': temp_bucket,
+                    'output_bucket': output_bucket
+                }
+            else:
+                logger.info("처리 대기 중인 이미지는 없지만, 아직 모든 이미지가 처리되지 않았습니다. 다음 오케스트레이션 주기를 기다립니다.")
+                publish_completion_event(run_id, False) # 아직 완료되지 않았음을 알림
+                return {
+                    'run_id': run_id,
+                    'is_work_done': False,
+                    'batch_to_process': [], # 빈 배치 반환하여 Map 상태가 실행되지 않도록 함
+                    'input_bucket': input_bucket,
+                    'temp_bucket': temp_bucket,
+                    'output_bucket': output_bucket
+                }
         
         batch_to_process = []
-        for task in tasks:
+        for task in tasks_to_process:
             batch_to_process.append({
-                "run_id": task['run_id'],
-                "image_key": task['image_key'],
-                "input_bucket": event['input_bucket'],
-                "temp_bucket": event['temp_bucket'],
-                "output_bucket": event['output_bucket']
+                'run_id': run_id,
+                'image_key': task['image_key'],
+                'input_bucket': input_bucket,
+                'temp_bucket': temp_bucket,
+                'output_bucket': output_bucket
             })
+            # 처리할 이미지의 상태를 'PROCESSING'으로 업데이트
+            update_image_status(run_id, task['image_key'], 'PROCESSING')
 
-        logger.info(f"배치 처리 시작: {len(tasks)}개 작업")
+        logger.info(f"배치 처리 시작: {len(tasks_to_process)}개 작업")
         
         # 메트릭 기록
-        cloudwatch.put_metric_data(
-            Namespace='BookScan/Orchestration',
-            MetricData=[
-                {
-                    'MetricName': 'BatchSize',
-                    'Value': len(tasks),
-                    'Unit': 'Count',
-                    'Dimensions': [
-                        {'Name': 'RunId', 'Value': run_id}
-                    ]
-                }
-            ]
-        )
+        metrics.add_metric(name="BatchSize", unit="Count", value=len(tasks_to_process))
+        metrics.add_dimension(name="RunId", value=run_id)
         
         return {
-            "is_work_done": False,
-            "batch_to_process": batch_to_process,
-            "batch_size": batch_size
+            'run_id': run_id,
+            'is_work_done': False,
+            'batch_to_process': batch_to_process,
+            'input_bucket': input_bucket,
+            'temp_bucket': temp_bucket,
+            'output_bucket': output_bucket
         }
 
     except Exception as e:

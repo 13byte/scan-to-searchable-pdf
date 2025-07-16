@@ -1,68 +1,127 @@
-import boto3
 import os
-import logging
+import json
+import boto3
 from datetime import datetime, timedelta
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools.logging import Logger
+from aws_lambda_powertools.metrics import Metrics
+from aws_lambda_powertools.tracer import Tracer
 
-s3_client = boto3.client('s3')
+logger = Logger()
+metrics = Metrics()
+tracer = Tracer()
+
 dynamodb = boto3.resource('dynamodb')
+s3_client = boto3.client('s3')
 
-DYNAMODB_TABLE_NAME = os.environ['DYNAMODB_STATE_TABLE']
-COVER_FILES = ['~.jpg', 'z.jpg']
-
-def handler(event, context):
+@tracer.capture_method
+def get_image_keys_from_s3(bucket_name, run_id, input_prefix):
     """
-    S3에서 이미지를 나열하고 DynamoDB 레코드를 생성하여 워크플로우 상태를 초기화합니다.
-    표지 페이지(~.jpg, z.jpg)는 처리 단계에서 제외하기 위해 'COMPLETED'로 표시됩니다.
+    S3 버킷에서 이미지 키 목록을 가져옵니다.
     """
-    run_id = event['run_id']
-    input_bucket = event['input_bucket']
-    input_prefix = event.get('input_prefix', '')
+    image_keys = []
+    paginator = s3_client.get_paginator('list_objects_v2')
+    pages = paginator.paginate(Bucket=bucket_name, Prefix=input_prefix)
     
-    logger.info(f"run_id: {run_id}에 대한 상태 초기화 중.")
-    
-    state_table = dynamodb.Table(DYNAMODB_TABLE_NAME)
-    
-    try:
-        paginator = s3_client.get_paginator('list_objects_v2')
-        pages = paginator.paginate(Bucket=input_bucket, Prefix=input_prefix)
+    for page in pages:
+        if "Contents" in page:
+            for obj in page['Contents']:
+                # 폴더 자체는 제외하고 이미지 파일만 포함
+                if not obj['Key'].endswith('/') and obj['Key'].lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+                    image_keys.append(obj['Key'])
+    return image_keys
 
-        image_count = 0
-        with state_table.batch_writer() as batch:
-            for page in pages:
-                if 'Contents' not in page:
-                    continue
-                for obj in page['Contents']:
-                    image_key = obj['Key']
-                    if not image_key.lower().endswith(('.jpg', '.jpeg')):
-                        continue
+@logger.inject_lambda_context(log_event=True)
+@metrics.log_metrics(capture_cold_start_metric=True)
+@tracer.capture_lambda_handler
+def handler(event: dict, context: LambdaContext) -> dict:
+    """
+    워크플로우 초기 상태를 설정하고 DynamoDB에 이미지 정보를 기록합니다.
+    """
+    run_id = event.get('run_id')
+    input_bucket = event.get('input_bucket')
+    temp_bucket = event.get('temp_bucket')
+    output_bucket = event.get('output_bucket')
+    input_prefix = event.get('input_prefix', '') # 새로운 input_prefix 추가
+    
+    if not run_id:
+        logger.error("run_id가 제공되지 않았습니다.")
+        raise ValueError("run_id는 필수입니다.")
 
-                    image_count += 1
-                    # 처리 단계를 건너뛰기 위해 표지 파일을 완료로 표시
-                    is_cover = any(cover_name in image_key for cover_name in COVER_FILES)
-                    
-                    batch.put_item(
-                        Item={
-                            'run_id': run_id,
-                            'image_key': image_key,
-                            'job_status': 'COMPLETED' if is_cover else 'PENDING',
-                            'attempts': 0,
-                            'last_updated': datetime.utcnow().isoformat(),
-                            'output_path': image_key if is_cover else None,
-                            'is_cover': is_cover,
-                            'priority': 0, # 초기 우선순위 설정
-                            'expires_at': int((datetime.utcnow() + timedelta(days=7)).timestamp()) # 7일 후 만료
-                        }
-                    )
-        
-        logger.info(f"{image_count}개 이미지에 대한 상태 초기화 성공.")
+    state_table_name = os.environ.get("DYNAMODB_STATE_TABLE")
+    if not state_table_name:
+        logger.error("DYNAMODB_STATE_TABLE 환경 변수가 설정되지 않았습니다.")
+        raise ValueError("DYNAMODB_STATE_TABLE 환경 변수가 필요합니다.")
+    
+    table = dynamodb.Table(state_table_name)
+    
+    # S3에서 이미지 키 목록 가져오기
+    image_keys = get_image_keys_from_s3(input_bucket, run_id, input_prefix)
+    
+    if not image_keys:
+        logger.warn(f"'{input_prefix}' 접두사를 가진 '{input_bucket}' 버킷에서 이미지를 찾을 수 없습니다.")
+        # 이미지가 없는 경우에도 워크플로우 상태는 초기화
+        table.put_item(
+            Item={
+                'run_id': run_id,
+                'image_key': 'workflow_status',
+                'job_status': 'NO_IMAGES_FOUND',
+                'total_images': 0,
+                'skipped_images': 0,
+                'initialized_at': datetime.utcnow().isoformat(),
+                'expires_at': int((datetime.utcnow() + timedelta(days=7)).timestamp())
+            }
+        )
         return {
-            "statusCode": 200,
-            "image_count": image_count
+            'run_id': run_id,
+            'total_images': 0,
+            'input_bucket': input_bucket,
+            'temp_bucket': temp_bucket,
+            'output_bucket': output_bucket
         }
 
-    except Exception as e:
-        logger.error(f"상태 초기화 실패: {str(e)}")
-        raise
+    # DynamoDB에 이미지 정보 배치 쓰기
+    with table.batch_writer() as batch:
+        total_images = len(image_keys)
+        skipped_images_count = 0
+        for i, key in enumerate(image_keys):
+            # ~.jpg와 z.jpg는 표지로 간주하여 처리 대상에서 제외합니다.
+            is_cover = key.endswith('~.jpg') or key.endswith('z.jpg')
+            if is_cover:
+                skipped_images_count += 1
+            
+            batch.put_item(
+                Item={
+                    'run_id': run_id,
+                    'image_key': os.path.basename(key), # 파일 이름만 저장
+                    'job_status': 'INITIALIZED',
+                    'priority': i, # 순서 유지를 위한 우선순위
+                    'is_cover': is_cover,
+                    'initialized_at': datetime.utcnow().isoformat(),
+                    'expires_at': int((datetime.utcnow() + timedelta(days=7)).timestamp()) # 7일 후 만료
+                }
+            )
+        
+        # 워크플로우 전체 상태 기록
+        batch.put_item(
+            Item={
+                'run_id': run_id,
+                'image_key': 'workflow_status',
+                'job_status': 'INITIALIZED',
+                'total_images': total_images,
+                'skipped_images': skipped_images_count,
+                'initialized_at': datetime.utcnow().isoformat(),
+                'expires_at': int((datetime.utcnow() + timedelta(days=7)).timestamp())
+            }
+        )
+
+    logger.info(f"Run ID: {run_id}, 총 {total_images}개의 이미지 상태가 초기화되었습니다. {skipped_images_count}개 이미지 스킵.")
+    
+    return {
+        'run_id': run_id,
+        'total_images': total_images,
+        'input_bucket': input_bucket,
+        'temp_bucket': temp_bucket,
+        'output_bucket': output_bucket
+    }
