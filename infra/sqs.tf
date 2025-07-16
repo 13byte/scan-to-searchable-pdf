@@ -2,7 +2,7 @@ resource "aws_sqs_queue" "dlq" {
   name                       = "${var.project_name}-dlq"
   message_retention_seconds  = 1209600
   visibility_timeout_seconds = 300
-  
+
   tags = {
     Name        = "${var.project_name}-dlq"
     Environment = var.environment
@@ -13,7 +13,7 @@ resource "aws_sqs_queue" "dlq" {
 resource "aws_sqs_queue" "retry_queue" {
   name                       = "${var.project_name}-retry-queue"
   visibility_timeout_seconds = 300
-  
+
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.dlq.arn
     maxReceiveCount     = 3
@@ -34,15 +34,15 @@ data "archive_file" "dlq_processor" {
 
 resource "aws_lambda_function" "dlq_processor" {
   function_name    = "${var.project_name}-dlq-processor"
-  role            = aws_iam_role.lambda_fargate_base_role.arn
-  handler         = "main.handler"
-  runtime         = "python3.12"
-  architectures   = ["arm64"]
-  timeout         = 60
-  memory_size     = 256
-  filename        = data.archive_file.dlq_processor.output_path
+  role             = aws_iam_role.lambda_fargate_base_role.arn
+  handler          = "main.handler"
+  runtime          = "python3.12"
+  architectures    = ["arm64"]
+  timeout          = 60
+  memory_size      = 256
+  filename         = data.archive_file.dlq_processor.output_path
   source_code_hash = data.archive_file.dlq_processor.output_base64sha256
-  
+
   environment {
     variables = {
       SNS_TOPIC_ARN = var.sns_topic_arn
