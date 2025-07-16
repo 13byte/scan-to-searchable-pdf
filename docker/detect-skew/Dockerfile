@@ -18,6 +18,7 @@ RUN pip install uv && uv pip install --system --no-cache -r requirements.txt
 
 # Copy function code
 COPY main.py ${LAMBDA_TASK_ROOT}/lambda_function.py
+COPY secrets_cache.py ${LAMBDA_TASK_ROOT}/secrets_cache.py
 
 # Set the default Lambda handler
 CMD ["lambda_function.lambda_handler"]

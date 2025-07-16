@@ -76,6 +76,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "temp_bucket_lifecycle" {
   rule {
     id     = "temp_files_expiration"
     status = "Enabled"
+    prefix = "" # 모든 객체에 적용
 
     expiration {
       days = 7 # 7일 후 임시 파일 삭제
