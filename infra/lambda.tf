@@ -9,11 +9,11 @@ resource "null_resource" "build_pdf_layer" {
 }
 
 resource "aws_lambda_layer_version" "pdf_dependencies" {
-  filename   = "${path.module}/../build/pdf-dependencies-layer.zip"
-  layer_name = "${var.project_name}-pdf-dependencies"
-  compatible_runtimes = ["python3.12"]
+  filename                 = "${path.module}/../build/pdf-dependencies-layer.zip"
+  layer_name               = "${var.project_name}-pdf-dependencies"
+  compatible_runtimes      = ["python3.12"]
   compatible_architectures = ["arm64"]
-  depends_on = [null_resource.build_pdf_layer]
+  depends_on               = [null_resource.build_pdf_layer]
 }
 
 data "archive_file" "initialize_state" {
@@ -89,7 +89,8 @@ resource "aws_lambda_function" "orchestrator" {
   environment {
     variables = {
       DYNAMODB_STATE_TABLE = aws_dynamodb_table.state_tracking.name
-      MAX_BATCH_SIZE       = "50"
+      MAX_BATCH_SIZE       = var.max_batch_size
+      MIN_BATCH_SIZE       = var.min_batch_size
     }
   }
   depends_on = [aws_cloudwatch_log_group.lambda_logs["orchestrator"]]
@@ -97,21 +98,21 @@ resource "aws_lambda_function" "orchestrator" {
 
 resource "aws_lambda_function" "upscaler" {
   function_name                  = "${var.project_name}-upscaler"
-  role                          = aws_iam_role.lambda_fargate_base_role.arn
-  handler                       = "main.handler"
-  runtime                       = "python3.12"
-  architectures                 = ["arm64"]
-  timeout                       = 300
-  memory_size                   = 768
+  role                           = aws_iam_role.lambda_fargate_base_role.arn
+  handler                        = "main.handler"
+  runtime                        = "python3.12"
+  architectures                  = ["arm64"]
+  timeout                        = 300
+  memory_size                    = 768
   reserved_concurrent_executions = 25
-  filename                      = data.archive_file.upscaler.output_path
-  source_code_hash              = data.archive_file.upscaler.output_base64sha256
-  
+  filename                       = data.archive_file.upscaler.output_path
+  source_code_hash               = data.archive_file.upscaler.output_base64sha256
+
   environment {
     variables = {
       DYNAMODB_STATE_TABLE    = aws_dynamodb_table.state_tracking.name
       SAGEMAKER_ENDPOINT_NAME = aws_sagemaker_endpoint.realesrgan.name
-      LOG_LEVEL              = "INFO"
+      LOG_LEVEL               = "INFO"
       POWERTOOLS_SERVICE_NAME = "upscaler"
     }
   }
@@ -138,13 +139,13 @@ resource "aws_lambda_function" "pdf_generator" {
   filename         = data.archive_file.pdf_generator.output_path
   source_code_hash = data.archive_file.pdf_generator.output_base64sha256
   layers           = [aws_lambda_layer_version.pdf_dependencies.arn]
-  
+
   environment {
     variables = {
-      DYNAMODB_STATE_TABLE = aws_dynamodb_table.state_tracking.name
-      OUTPUT_BUCKET        = aws_s3_bucket.output.id
-      TEMP_BUCKET          = aws_s3_bucket.temp.id
-      LOG_LEVEL           = "INFO"
+      DYNAMODB_STATE_TABLE    = aws_dynamodb_table.state_tracking.name
+      OUTPUT_BUCKET           = aws_s3_bucket.output.id
+      TEMP_BUCKET             = aws_s3_bucket.temp.id
+      LOG_LEVEL               = "INFO"
       POWERTOOLS_SERVICE_NAME = "pdf-generator"
     }
   }
@@ -172,7 +173,7 @@ resource "aws_lambda_function" "summary_generator" {
   source_code_hash = data.archive_file.summary_generator.output_base64sha256
   environment {
     variables = {
-      OUTPUT_BUCKET = aws_s3_bucket.output.id
+      OUTPUT_BUCKET        = aws_s3_bucket.output.id
       DYNAMODB_STATE_TABLE = aws_dynamodb_table.state_tracking.name
     }
   }
@@ -181,19 +182,19 @@ resource "aws_lambda_function" "summary_generator" {
 
 resource "aws_lambda_function" "detect_skew" {
   function_name                  = "${var.project_name}-detect-skew"
-  role                          = aws_iam_role.lambda_fargate_base_role.arn
-  package_type                  = "Image"
-  image_uri                     = "${aws_ecr_repository.detect_skew_lambda.repository_url}:${var.detect_skew_lambda_image_tag}"
-  architectures                 = ["arm64"]
-  timeout                       = 30
-  memory_size                   = 1024
+  role                           = aws_iam_role.lambda_fargate_base_role.arn
+  package_type                   = "Image"
+  image_uri                      = "${aws_ecr_repository.detect_skew_lambda.repository_url}:${var.detect_skew_lambda_image_tag}"
+  architectures                  = ["arm64"]
+  timeout                        = 30
+  memory_size                    = 1024
   reserved_concurrent_executions = 50
-  
+
   environment {
     variables = {
-      DYNAMODB_STATE_TABLE = aws_dynamodb_table.state_tracking.name
-      GOOGLE_SECRET_NAME   = aws_secretsmanager_secret.google_credentials.name
-      LOG_LEVEL           = "INFO"
+      DYNAMODB_STATE_TABLE    = aws_dynamodb_table.state_tracking.name
+      GOOGLE_SECRET_NAME      = aws_secretsmanager_secret.google_credentials.name
+      LOG_LEVEL               = "INFO"
       POWERTOOLS_SERVICE_NAME = "detect-skew"
     }
   }
@@ -211,19 +212,19 @@ resource "aws_lambda_function" "detect_skew" {
 
 resource "aws_lambda_function" "process_ocr" {
   function_name                  = "${var.project_name}-process-ocr"
-  role                          = aws_iam_role.lambda_fargate_base_role.arn
-  package_type                  = "Image"
-  image_uri                     = "${aws_ecr_repository.process_ocr_lambda.repository_url}:${var.process_ocr_lambda_image_tag}"
-  architectures                 = ["arm64"]
-  timeout                       = 60
-  memory_size                   = 2048
+  role                           = aws_iam_role.lambda_fargate_base_role.arn
+  package_type                   = "Image"
+  image_uri                      = "${aws_ecr_repository.process_ocr_lambda.repository_url}:${var.process_ocr_lambda_image_tag}"
+  architectures                  = ["arm64"]
+  timeout                        = 60
+  memory_size                    = 2048
   reserved_concurrent_executions = 30
-  
+
   environment {
     variables = {
-      DYNAMODB_STATE_TABLE = aws_dynamodb_table.state_tracking.name
-      GOOGLE_SECRET_NAME   = aws_secretsmanager_secret.google_credentials.name
-      LOG_LEVEL           = "INFO"
+      DYNAMODB_STATE_TABLE    = aws_dynamodb_table.state_tracking.name
+      GOOGLE_SECRET_NAME      = aws_secretsmanager_secret.google_credentials.name
+      LOG_LEVEL               = "INFO"
       POWERTOOLS_SERVICE_NAME = "process-ocr"
     }
   }
@@ -240,14 +241,14 @@ resource "aws_lambda_function" "process_ocr" {
 }
 
 resource "aws_lambda_function" "trigger_pipeline" {
-  function_name    = "${var.project_name}-trigger-pipeline"
-  role             = aws_iam_role.lambda_fargate_base_role.arn
-  package_type     = "Image"
-  image_uri        = "${aws_ecr_repository.trigger_pipeline_lambda.repository_url}:${var.trigger_pipeline_lambda_image_tag}"
-  architectures    = ["arm64"]
-  timeout          = 60
-  memory_size      = 256
-  
+  function_name = "${var.project_name}-trigger-pipeline"
+  role          = aws_iam_role.lambda_fargate_base_role.arn
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.trigger_pipeline_lambda.repository_url}:${var.trigger_pipeline_lambda_image_tag}"
+  architectures = ["arm64"]
+  timeout       = 60
+  memory_size   = 256
+
   environment {
     variables = {
       TEMP_BUCKET = aws_s3_bucket.temp.id
