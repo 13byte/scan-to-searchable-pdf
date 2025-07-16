@@ -13,16 +13,16 @@
 ## 처리 과정
 
 ```
-스캔 이미지 (S3) → 기울기 감지 → 각도 보정 → 업스케일링 → OCR → PDF 생성
+스캔 이미지 (S3) → 기울기 감지 (표지 제외) → 각도 보정 → 업스케일링 → OCR → PDF 생성
 ```
 
 ## 아키텍처 개선사항
 
 - **워크플로우**: AWS Step Functions 오케스트레이션
-- **상태 관리**: DynamoDB GSI 최적화로 쿼리 성능 향상 및 TTL을 통한 데이터 자동 정리
+- **상태 관리**: DynamoDB GSI 최적화로 쿼리 성능 향상 및 TTL을 통한 데이터 자동 정리, 표지 이미지 스킵 카운트 및 우선순위 기반 처리
 - **병렬 처리**: 동적 배치 크기 조정으로 최대 50개 이미지 동시 처리 (환경 변수 `MAX_BATCH_SIZE`, `MIN_BATCH_SIZE`로 설정 가능)
-- **내결함성**: DLQ 기반 자동 재시도 및 복구, ECR 이미지 태그 불변성(`IMMUTABLE`) 설정으로 배포 일관성 확보
-- **모니터링**: X-Ray 트레이싱, CloudWatch 메트릭(처리 지연, Secrets Cache 미스율), Vision API 할당량 초과 알람
+- **내결함성**: DLQ 기반 자동 재시도 및 복구, ECR 이미지 태그 가변성(`MUTABLE`) 설정으로 개발 편의성 확보
+- **모니터링**: X-Ray 트레이싱, CloudWatch 메트릭(처리 지연, Secrets Cache 미스율), Vision API 할당량 초과 알람, `aws-lambda-powertools`를 통한 통합 로깅/메트릭/트레이싱
 
 ## 시작하기
 
@@ -133,6 +133,7 @@ AWS Step Functions 콘솔에서 실행:
 3. **Google API 오류**: 서비스 계정 키 및 Vision API 활성화 확인
 4. **메모리 부족**: `MAX_BATCH_SIZE` 환경변수 조정
 5. **테스트 실패**: `./run.sh test` 실행 후 오류 로그 확인
+6. **Docker 빌드 오류**: `scripts/commands.sh`에서 `docker build` 컨텍스트 및 Dockerfile `COPY` 경로 확인
 
 ## 리소스 삭제
 
