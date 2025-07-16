@@ -28,14 +28,14 @@ resource "aws_iam_policy" "lambda_fargate_sagemaker_invoke_policy" {
         Action = [
           "sagemaker:InvokeEndpoint"
         ],
-        Resource = "arn:aws:sagemaker:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:endpoint/${var.project_name}-*"
+        Resource = "arn:aws:sagemaker:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:endpoint/${var.project_name}-*"
       },
       {
         Effect = "Allow",
         Action = [
           "secretsmanager:GetSecretValue"
         ],
-        Resource = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:${var.project_name}-*"
+        Resource = "arn:aws:secretsmanager:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:secret:${var.project_name}-*"
       }
     ]
   })
@@ -121,7 +121,10 @@ resource "aws_iam_policy" "base_policy" {
       {
         Effect = "Allow",
         Action = [
-          "sqs:SendMessage"
+          "sqs:SendMessage",
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes"
         ],
         Resource = aws_sqs_queue.dlq.arn
       }

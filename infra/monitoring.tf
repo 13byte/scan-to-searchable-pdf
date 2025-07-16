@@ -8,7 +8,7 @@ resource "aws_cloudwatch_metric_alarm" "processing_latency_alarm" {
   namespace           = "BookScan/Processing"
   period              = "300"
   statistic           = "Average"
-  threshold           = "60000"  # 60초
+  threshold           = "60000" # 60초
   alarm_description   = "이미지 처리 지연시간 임계값 초과"
   alarm_actions       = [var.sns_topic_arn]
 
@@ -25,7 +25,7 @@ resource "aws_cloudwatch_metric_alarm" "secrets_cache_miss_rate" {
   namespace           = "BookScan/Security"
   period              = "300"
   statistic           = "Average"
-  threshold           = "15"  # 15% 미스율
+  threshold           = "15" # 15% 미스율
   alarm_description   = "Secrets 캐시 미스율 높음"
   alarm_actions       = [var.sns_topic_arn]
 }
@@ -40,4 +40,6 @@ resource "aws_cloudwatch_log_metric_filter" "vision_api_quota_exceeded" {
     namespace = "BookScan/Errors"
     value     = "1"
   }
+
+  depends_on = [aws_cloudwatch_log_group.lambda_logs]
 }
