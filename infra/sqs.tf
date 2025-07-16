@@ -1,19 +1,78 @@
-resource "aws_sqs_queue" "failure_dlq" {
-  name                      = "${var.project_name}-failure-dlq"
-  message_retention_seconds = 1209600
+resource "aws_sqs_queue" "dlq" {
+  name                       = "${var.project_name}-dlq"
+  message_retention_seconds  = 1209600
   visibility_timeout_seconds = 300
-
+  
   tags = {
-    Name = "${var.project_name}-failure-dlq"
+    Name        = "${var.project_name}-dlq"
+    Environment = var.environment
+    Purpose     = "Dead Letter Queue for failed processing"
   }
 }
 
-output "failure_dlq_url" {
-  description = "실패용 SQS 데드 레터 큐의 URL."
-  value       = aws_sqs_queue.failure_dlq.id
+resource "aws_sqs_queue" "retry_queue" {
+  name                       = "${var.project_name}-retry-queue"
+  visibility_timeout_seconds = 300
+  
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.dlq.arn
+    maxReceiveCount     = 3
+  })
+
+  tags = {
+    Name        = "${var.project_name}-retry-queue"
+    Environment = var.environment
+    Purpose     = "Retry queue for transient failures"
+  }
 }
 
-output "failure_dlq_arn" {
-  description = "실패용 SQS 데드 레터 큐의 ARN."
-  value       = aws_sqs_queue.failure_dlq.arn
+data "archive_file" "dlq_processor" {
+  type        = "zip"
+  source_dir  = "${path.module}/../workers/dlq_processor"
+  output_path = "${path.module}/../dist/dlq_processor.zip"
+}
+
+resource "aws_lambda_function" "dlq_processor" {
+  function_name    = "${var.project_name}-dlq-processor"
+  role            = aws_iam_role.lambda_fargate_base_role.arn
+  handler         = "main.handler"
+  runtime         = "python3.12"
+  architectures   = ["arm64"]
+  timeout         = 60
+  memory_size     = 256
+  filename        = data.archive_file.dlq_processor.output_path
+  source_code_hash = data.archive_file.dlq_processor.output_base64sha256
+  
+  environment {
+    variables = {
+      SNS_TOPIC_ARN = var.sns_topic_arn
+      LOG_LEVEL     = "INFO"
+    }
+  }
+
+  tags = {
+    Name        = "${var.project_name}-dlq-processor"
+    Environment = var.environment
+  }
+}
+
+resource "aws_lambda_event_source_mapping" "dlq_trigger" {
+  event_source_arn = aws_sqs_queue.dlq.arn
+  function_name    = aws_lambda_function.dlq_processor.arn
+  batch_size       = 10
+}
+
+output "dlq_url" {
+  description = "DLQ URL"
+  value       = aws_sqs_queue.dlq.id
+}
+
+output "dlq_arn" {
+  description = "DLQ ARN"
+  value       = aws_sqs_queue.dlq.arn
+}
+
+output "retry_queue_url" {
+  description = "Retry Queue URL"
+  value       = aws_sqs_queue.retry_queue.id
 }

@@ -128,7 +128,7 @@ resource "aws_iam_policy" "base_policy" {
         Action = [
           "sqs:SendMessage"
         ],
-        Resource = aws_sqs_queue.failure_dlq.arn
+        Resource = aws_sqs_queue.dlq.arn
       }
     ]
   })
