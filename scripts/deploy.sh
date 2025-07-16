@@ -73,9 +73,16 @@ log_success "ECR 로그인 완료 (계정 ID: ${AWS_ACCOUNT_ID})."
 build_and_push() {
     local context_path=$1
     local repo_name=$2
+    local dockerfile_path=$3
     local ecr_repo_url="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${repo_name}:latest"
     
     log_info ">> '${repo_name}' 이미지 빌드 및 푸시를 시작합니다..."
+    
+    # Dockerfile 경로 지정 옵션 추가
+    local docker_args=""
+    if [ -n "$dockerfile_path" ]; then
+        docker_args="--file $dockerfile_path"
+    fi
     
     # SageMaker 호환성을 위한 Direct Registry Push
     docker buildx build \
@@ -83,14 +90,19 @@ build_and_push() {
         --provenance=false \
         --output type=image,push=true,oci-mediatypes=false \
         --tag "$ecr_repo_url" \
+        $docker_args \
         "$context_path"
     
     log_success ">> '${repo_name}' 이미지 푸시가 완료되었습니다."
 }
 
-build_and_push "fargate" "${PROJECT_NAME}-fargate-processor"
-build_and_push "sagemaker" "${PROJECT_NAME}-sagemaker-upscaler"
-build_and_push "workers/2_image_processing/vision_api_handler" "${PROJECT_NAME}/vision-api-handler"
+build_and_push "." "${PROJECT_NAME}/orchestrator" "docker/orchestrator/Dockerfile"
+build_and_push "." "${PROJECT_NAME}/detect-skew" "docker/detect-skew/Dockerfile"
+build_and_push "." "${PROJECT_NAME}/process-ocr" "docker/process-ocr/Dockerfile"
+build_and_push "." "${PROJECT_NAME}/trigger-pipeline" "docker/trigger-pipeline/Dockerfile"
+build_and_push "." "${PROJECT_NAME}/pdf-generator" "docker/pdf-generator/Dockerfile"
+build_and_push "workers/2_image_processing/skew_corrector" "${PROJECT_NAME}/skew-corrector"
+build_and_push "sagemaker" "${PROJECT_NAME}/sagemaker-realesrgan"
 
 log_success "모든 Docker 이미지를 ECR에 성공적으로 푸시했습니다."
 
