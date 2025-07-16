@@ -43,11 +43,6 @@ resource "aws_iam_policy" "lambda_fargate_sagemaker_invoke_policy" {
 
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
-        Resource = aws_sagemaker_endpoint.realesrgan.arn
-      }
-    ]
-  })
-}
 
 resource "aws_iam_role_policy_attachment" "lambda_fargate_sagemaker_invoke_attach" {
   role       = aws_iam_role.lambda_fargate_base_role.name
@@ -216,8 +211,8 @@ resource "aws_iam_policy" "step_functions_policy" {
       {
         Effect = "Allow",
         Action = [
-            "ecs:StopTask",
-            "ecs:DescribeTasks"
+          "ecs:StopTask",
+          "ecs:DescribeTasks"
         ],
         Resource = "*"
       },
