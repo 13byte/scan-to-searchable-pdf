@@ -1,7 +1,6 @@
 import os
 import json
 import boto3
-import psutil
 from boto3.dynamodb.conditions import Key
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.logging import Logger
@@ -24,16 +23,11 @@ EVENT_BUS_NAME = os.environ['EVENT_BUS_NAME']
 MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '50'))
 MIN_BATCH_SIZE = int(os.environ.get('MIN_BATCH_SIZE', '5'))
 
-import psutil
 
 @tracer.capture_method
 def calculate_dynamic_batch_size(run_id: str) -> int:
-    """메모리 사용량 및 CloudWatch 메트릭 기반 배치 크기 계산"""
+    """CloudWatch 메트릭 기반 배치 크기 계산"""
     try:
-        # 메모리 사용량 확인
-        memory_info = psutil.virtual_memory()
-        memory_percent = memory_info.percent
-        
         # CloudWatch 메트릭 조회
         response = cloudwatch.get_metric_statistics(
             Namespace='BookScan/Processing',
@@ -60,28 +54,12 @@ def calculate_dynamic_batch_size(run_id: str) -> int:
                 factor = (60 - avg_latency) / 50
                 base_size = MIN_BATCH_SIZE + int((MAX_BATCH_SIZE - MIN_BATCH_SIZE) * factor)
         
-        # 메모리 사용량 기반 조정
-        if memory_percent > 80:
-            batch_size = max(MIN_BATCH_SIZE, base_size // 2)
-        elif memory_percent > 60:
-            batch_size = max(MIN_BATCH_SIZE, int(base_size * 0.7))
-        elif memory_percent < 30:
-            batch_size = min(MAX_BATCH_SIZE, int(base_size * 1.3))
-        else:
-            batch_size = base_size
+        batch_size = base_size
             
-        # 메모리 메트릭 기록
+        # 배치 크기 메트릭 기록
         cloudwatch.put_metric_data(
             Namespace='BookScan/Processing',
             MetricData=[
-                {
-                    'MetricName': 'MemoryUsagePercent',
-                    'Dimensions': [
-                        {'Name': 'RunId', 'Value': run_id}
-                    ],
-                    'Value': memory_percent,
-                    'Unit': 'Percent'
-                },
                 {
                     'MetricName': 'BatchSizeAdjusted',
                     'Dimensions': [
