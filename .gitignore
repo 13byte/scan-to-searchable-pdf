@@ -30,8 +30,7 @@ config/*credentials*.json
 # AWS Nuke 설정 파일 (민감한 계정 정보 포함)
 nuke-config.yml
 nuke-config.yaml
-*nuke*.yml
-*nuke*.yaml
+# 템플릿 파일은 허용
 
 .terraform/
 .terraform.lock.hcl
