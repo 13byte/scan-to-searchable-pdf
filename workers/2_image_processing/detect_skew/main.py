@@ -46,12 +46,16 @@ def get_vision_client():
         logger.info("Vision 클라이언트 초기화/갱신")
         start_time = time.time()
         
+        # credentials 변수 초기화
+        credentials = None
+        
         if GOOGLE_SECRET_NAME not in credentials_cache or current_time - last_refresh > CACHE_TTL:
             credentials = get_cached_secret(GOOGLE_SECRET_NAME)
             credentials_cache[GOOGLE_SECRET_NAME] = credentials
             last_refresh = current_time
             cache_miss = 1
         else:
+            credentials = credentials_cache[GOOGLE_SECRET_NAME]
             cache_miss = 0
             
         end_time = time.time()
