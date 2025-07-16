@@ -1,7 +1,7 @@
 import boto3
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -51,7 +51,9 @@ def handler(event, context):
                             'attempts': 0,
                             'last_updated': datetime.utcnow().isoformat(),
                             'output_path': image_key if is_cover else None,
-                            'is_cover': is_cover
+                            'is_cover': is_cover,
+                            'priority': 0, # 초기 우선순위 설정
+                            'expires_at': int((datetime.utcnow() + timedelta(days=7)).timestamp()) # 7일 후 만료
                         }
                     )
         

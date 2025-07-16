@@ -1,8 +1,8 @@
 resource "aws_dynamodb_table" "state_tracking" {
-  name           = "${var.project_name}-state-tracking"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "run_id"
-  range_key      = "image_key"
+  name         = "${var.project_name}-state-tracking"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "run_id"
+  range_key    = "image_key"
 
   attribute {
     name = "run_id"
@@ -28,7 +28,7 @@ resource "aws_dynamodb_table" "state_tracking" {
     name            = "status-priority-index"
     hash_key        = "job_status"
     range_key       = "priority"
-    projection_type = "ALL"
+    projection_type = "KEYS_ONLY"
   }
 
   global_secondary_index {
