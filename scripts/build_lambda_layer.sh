@@ -16,8 +16,8 @@ mkdir -p "$PYTHON_DIR"
 # 모든 requirements.txt 파일에서 의존성 설치
 find "$PROJECT_ROOT" -name "requirements.txt" | while read -r req_file; do
   echo "Installing dependencies from $req_file..."
-  # --only-binary=:all: 옵션 제거
-  pip3 install --platform manylinux2014_aarch64 --target "$PYTHON_DIR" --python-version 3.12 -r "$req_file"
+  # --only-binary=:all: 옵션 다시 추가
+  pip3 install --platform manylinux2014_aarch64 --target "$PYTHON_DIR" --python-version 3.12 --only-binary=:all: -r "$req_file"
 done
 
 # Layer ZIP 파일 생성
