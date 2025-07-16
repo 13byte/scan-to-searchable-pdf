@@ -1,0 +1,6 @@
+pytest==8.2.2
+pytest-mock==3.14.0
+moto==5.0.9
+boto3>=1.28.0
+aws-lambda-powertools>=2.37.0
+coverage==7.5.4
