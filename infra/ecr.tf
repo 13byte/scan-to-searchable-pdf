@@ -60,6 +60,7 @@ resource "aws_ecr_lifecycle_policy" "default_policy" {
         description  = "최근 3개의 태그된 이미지 ��지",
         selection = {
           tagStatus     = "tagged",
+          tagPatternList = ["*"], # 모든 태그된 이미지에 적용
           countType     = "imageCountMoreThan",
           countNumber   = 3
         },
