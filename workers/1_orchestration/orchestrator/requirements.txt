@@ -1,5 +1,5 @@
 boto3>=1.28.0
-google-cloud-vision>=3.4.0
+aws-lambda-powertools==3.17.0
 numpy>=1.26.0
 opencv-python-headless>=4.8.0
 fpdf2>=2.7.8

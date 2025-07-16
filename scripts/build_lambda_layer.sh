@@ -13,12 +13,27 @@ PYTHON_DIR="$LAYER_DIR/python"
 rm -rf "$LAYER_DIR"
 mkdir -p "$PYTHON_DIR"
 
-# 모든 requirements.txt 파일에서 의존성 설치
-find "$PROJECT_ROOT" -name "requirements.txt" | while read -r req_file; do
-  echo "Installing dependencies from $req_file..."
-  # --only-binary=:all: 옵션 다시 추가
-  pip3 install --platform manylinux2014_aarch64 --target "$PYTHON_DIR" --python-version 3.12 --only-binary=:all: -r "$req_file"
+# Lambda 레이어를 사용하는 함수들의 requirements.txt 파일 목록
+REQUIREMENTS_FILES=(
+  "$PROJECT_ROOT/workers/1_orchestration/initialize_state/requirements.txt"
+  "$PROJECT_ROOT/workers/1_orchestration/orchestrator/requirements.txt"
+  "$PROJECT_ROOT/workers/3_finalization/pdf_generator/requirements.txt"
+  "$PROJECT_ROOT/workers/2_image_processing/upscaler/requirements.txt"
+  "$PROJECT_ROOT/workers/3_finalization/summary_generator/requirements.txt"
+)
+
+# 각 requirements.txt 파일에서 의존성 설치
+for req_file in "${REQUIREMENTS_FILES[@]}"; do
+  if [ -f "$req_file" ]; then
+    echo "Installing dependencies from $req_file..."
+    pip3 install --platform manylinux2014_aarch64 --target "$PYTHON_DIR" --python-version 3.12 --only-binary=:all: -r "$req_file"
+  else
+    echo "Warning: $req_file not found, skipping."
+  fi
 done
+
+# 추가적으로 필요한 라이브러리 (예: 폰트)
+cp "$PROJECT_ROOT/config/NotoSansKR-Regular.ttf" "$PYTHON_DIR/NotoSansKR-Regular.ttf"
 
 # Layer ZIP 파일 생성
 cd "$LAYER_DIR"
