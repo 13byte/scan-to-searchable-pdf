@@ -1,24 +1,4 @@
-resource "null_resource" "build_pdf_layer" {
-  triggers = {
-    requirements_hash = filemd5("${path.module}/../workers/3_finalization/pdf_generator/requirements.txt")
-    font_hash         = filemd5("${path.module}/../config/NotoSansKR-Regular.ttf")
-    orchestrator_req_hash = filemd5("${path.module}/../workers/1_orchestration/orchestrator/requirements.txt")
-    initialize_state_req_hash = filemd5("${path.module}/../workers/1_orchestration/initialize_state/requirements.txt")
-    upscaler_req_hash = filemd5("${path.module}/../workers/2_image_processing/upscaler/requirements.txt")
-    summary_generator_req_hash = filemd5("${path.module}/../workers/3_finalization/summary_generator/requirements.txt")
-  }
-  provisioner "local-exec" {
-    command = "${path.module}/../scripts/build_lambda_layer.sh"
-  }
-}
-
-resource "aws_lambda_layer_version" "common_dependencies" {
-  filename                 = "${path.module}/../build/pdf-dependencies-layer.zip"
-  layer_name               = "${var.project_name}-pdf-dependencies"
-  compatible_runtimes      = ["python3.12"]
-  compatible_architectures = ["arm64"]
-  depends_on               = [null_resource.build_pdf_layer]
-}
+# Layer 인프라 완전 제거 - 모든 함수가 기본 런타임 또는 컨테이너 사용
 
 data "archive_file" "initialize_state" {
   type        = "zip"
@@ -34,11 +14,6 @@ data "archive_file" "upscaler" {
   type        = "zip"
   source_dir  = "${path.module}/../workers/2_image_processing/upscaler"
   output_path = "${path.module}/../dist/upscaler.zip"
-}
-data "archive_file" "pdf_generator" {
-  type        = "zip"
-  source_dir  = "${path.module}/../workers/3_finalization/pdf_generator"
-  output_path = "${path.module}/../dist/pdf_generator.zip"
 }
 data "archive_file" "summary_generator" {
   type        = "zip"
@@ -78,7 +53,6 @@ resource "aws_lambda_function" "initialize_state" {
     }
   }
   depends_on = [aws_cloudwatch_log_group.lambda_logs["initialize_state"]]
-  layers           = [aws_lambda_layer_version.common_dependencies.arn]
 }
 
 resource "aws_lambda_function" "orchestrator" {
@@ -100,7 +74,6 @@ resource "aws_lambda_function" "orchestrator" {
     }
   }
   depends_on = [aws_cloudwatch_log_group.lambda_logs["orchestrator"]]
-  layers           = [aws_lambda_layer_version.common_dependencies.arn]
 }
 
 resource "aws_lambda_function" "upscaler" {
@@ -140,14 +113,11 @@ resource "aws_lambda_function" "upscaler" {
 resource "aws_lambda_function" "pdf_generator" {
   function_name    = "${var.project_name}-pdf-generator"
   role             = aws_iam_role.lambda_fargate_base_role.arn
-  handler          = "main.handler"
-  runtime          = "python3.12"
+  package_type     = "Image"
+  image_uri        = "${aws_ecr_repository.pdf_generator_lambda.repository_url}:${var.pdf_generator_lambda_image_tag}"
   architectures    = ["arm64"]
   timeout          = 300
   memory_size      = 1536
-  filename         = data.archive_file.pdf_generator.output_path
-  source_code_hash = data.archive_file.pdf_generator.output_base64sha256
-  layers           = [aws_lambda_layer_version.common_dependencies.arn]
 
   environment {
     variables = {

@@ -28,8 +28,8 @@ DYNAMODB_TABLE_NAME = os.environ['DYNAMODB_STATE_TABLE']
 OUTPUT_BUCKET = os.environ['OUTPUT_BUCKET']
 TEMP_BUCKET = os.environ['TEMP_BUCKET']
 
-# 한글 폰트 경로 (Lambda 레이어에 포함되어야 함)
-FONT_PATH = "/opt/python/NotoSansKR-Regular.ttf" # Lambda 레이어 경로에 맞게 수정
+# 한글 폰트 경로 (컨테이너 환경변수 또는 기본값)
+FONT_PATH = os.environ.get('FONT_PATH', "/opt/python/fonts/NotoSansKR-Regular.ttf")
 
 class PDFGenerationError(Exception):
     pass

@@ -122,46 +122,61 @@ def warm_sagemaker_endpoint():
         logger.warning(f"엔드포인트 워밍업 실패: {e}")
         endpoint_warmed = False
 
-def invoke_sagemaker_with_retry(image_content, run_id, image_key):
-    """최적화된 SageMaker 호출"""
+def invoke_sagemaker_with_retry(image_content, run_id=None, image_key=None):
+    """통합된 SageMaker 호출 함수"""
     warm_sagemaker_endpoint()
     
     # 이미지 크기 기반 타임아웃 조정
     content_length = len(image_content)
     if content_length > 5 * 1024 * 1024:  # 5MB 초과
-        timeout = 180
+        timeout = 300
         logger.info(f"대용량 이미지 감지: {content_length} bytes, 타임아웃 연장")
     else:
-        timeout = 60
+        timeout = 180
     
     for attempt in range(MAX_RETRIES):
         try:
             start_time = time.time()
             
-            response = sagemaker_runtime.invoke_endpoint(
-                EndpointName=SAGEMAKER_ENDPOINT_NAME,
-                ContentType='image/jpeg',
-                Body=image_content,
-                InferenceId=f"{run_id}-{image_key}-{int(time.time())}",
-                TargetModel='realesrgan-model'
-            )
+            invoke_params = {
+                'EndpointName': SAGEMAKER_ENDPOINT_NAME,
+                'ContentType': 'image/jpeg',
+                'Body': image_content,
+                'InvocationTimeoutInSeconds': timeout
+            }
+            
+            # 선택적 매개변수 추가
+            if run_id and image_key:
+                invoke_params['InferenceId'] = f"{run_id}-{image_key}-{int(time.time())}"
+                invoke_params['TargetModel'] = 'realesrgan-model'
+            
+            response = sagemaker_runtime.invoke_endpoint(**invoke_params)
             
             processing_time = (time.time() - start_time) * 1000
             
             # 성능 메트릭 기록
+            metric_data = [
+                {
+                    'MetricName': 'SageMakerInferenceLatency',
+                    'Value': processing_time,
+                    'Unit': 'Milliseconds'
+                },
+                {
+                    'MetricName': 'SageMakerInvocationSuccess',
+                    'Value': 1,
+                    'Unit': 'Count'
+                }
+            ]
+            
+            if run_id:
+                metric_data[0]['Dimensions'] = [
+                    {'Name': 'RunId', 'Value': run_id},
+                    {'Name': 'ImageSize', 'Value': str(content_length)}
+                ]
+            
             cloudwatch_client.put_metric_data(
                 Namespace='BookScan/Performance',
-                MetricData=[
-                    {
-                        'MetricName': 'SageMakerInferenceLatency',
-                        'Dimensions': [
-                            {'Name': 'RunId', 'Value': run_id},
-                            {'Name': 'ImageSize', 'Value': str(content_length)}
-                        ],
-                        'Value': processing_time,
-                        'Unit': 'Milliseconds'
-                    }
-                ]
+                MetricData=metric_data
             )
             
             result = response['Body'].read()
@@ -171,13 +186,16 @@ def invoke_sagemaker_with_retry(image_content, run_id, image_key):
         except ClientError as e:
             error_code = e.response.get('Error', {}).get('Code', 'Unknown')
             
-            if error_code == 'ModelError' and attempt < MAX_RETRIES - 1:
-                logger.warning(f"SageMaker 모델 오류, 재시도 {attempt + 1}/{MAX_RETRIES}")
-                time.sleep(2 ** attempt)  # 지수 백오프
+            if error_code in ['ModelError', 'ModelNotReadyException', 'ServiceUnavailable'] and attempt < MAX_RETRIES - 1:
+                wait_time = (2 ** attempt) * 2
+                logger.warning(f"SageMaker 재시도 가능 오류 [{error_code}], 재시도 {attempt + 1}/{MAX_RETRIES}, 대기: {wait_time}초")
+                time.sleep(wait_time)
+                warm_sagemaker_endpoint()  # 재시도 전 워밍업
                 continue
-            elif error_code in ['ThrottlingException', 'TooManyRequestsException']:
-                logger.warning(f"SageMaker 스로틀링, 재시도 {attempt + 1}/{MAX_RETRIES}")
-                time.sleep(5 * (attempt + 1))
+            elif error_code in ['ThrottlingException', 'TooManyRequestsException'] and attempt < MAX_RETRIES - 1:
+                wait_time = 5 * (attempt + 1)
+                logger.warning(f"SageMaker 스로틀링 [{error_code}], 재시도 {attempt + 1}/{MAX_RETRIES}, 대기: {wait_time}초")
+                time.sleep(wait_time)
                 continue
             else:
                 logger.error(f"SageMaker 치명적 오류 [{error_code}]: {e}")
@@ -185,101 +203,15 @@ def invoke_sagemaker_with_retry(image_content, run_id, image_key):
                 
         except Exception as e:
             if attempt < MAX_RETRIES - 1:
+                wait_time = (2 ** attempt) * 2
                 logger.warning(f"SageMaker 일반 오류, 재시도 {attempt + 1}/{MAX_RETRIES}: {e}")
-                time.sleep(2 ** attempt)
+                time.sleep(wait_time)
                 continue
             else:
                 logger.error(f"SageMaker 최종 실패: {e}")
                 raise RetryableError(f"SageMaker failed after {MAX_RETRIES} attempts")
     
     raise RetryableError("SageMaker 호출 최대 재시도 도달")
-            InvocationTimeoutInSeconds=60
-        )
-        
-        warm_time = time.time() - start_time
-        endpoint_warmed = True
-        last_warm_time = current_time
-        
-        logger.info(f"SageMaker 엔드포인트 워밍업 완료: {warm_time:.2f}초")
-        
-        # 워밍업 메트릭 기록
-        cloudwatch_client.put_metric_data(
-            Namespace='BookScan/Performance',
-            MetricData=[
-                {
-                    'MetricName': 'EndpointWarmupTime',
-                    'Value': warm_time * 1000,
-                    'Unit': 'Milliseconds'
-                }
-            ]
-        )
-        
-    except Exception as e:
-        logger.warning(f"SageMaker 엔드포인트 워밍업 실패: {e}")
-        endpoint_warmed = False
-
-def invoke_sagemaker_with_retry(image_bytes, max_retries=3):
-    """콜드 스타트 최적화된 SageMaker 호출"""
-    warm_sagemaker_endpoint()
-    
-    for attempt in range(max_retries):
-        try:
-            start_time = time.time()
-            sm_response = sagemaker_runtime.invoke_endpoint(
-                EndpointName=SAGEMAKER_ENDPOINT_NAME,
-                ContentType='image/jpeg',
-                Body=image_bytes,
-                InvocationTimeoutInSeconds=300
-            )
-            
-            invoke_time = time.time() - start_time
-            
-            # 성능 메트릭 기록
-            cloudwatch_client.put_metric_data(
-                Namespace='BookScan/Performance',
-                MetricData=[
-                    {
-                        'MetricName': 'SageMakerInvocationTime',
-                        'Value': invoke_time * 1000,
-                        'Unit': 'Milliseconds'
-                    },
-                    {
-                        'MetricName': 'SageMakerInvocationSuccess',
-                        'Value': 1,
-                        'Unit': 'Count'
-                    }
-                ]
-            )
-            
-            return sm_response['Body'].read()
-            
-        except ClientError as e:
-            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
-            logger.warning(f"SageMaker 호출 시도 {attempt + 1}/{max_retries} 실패 [{error_code}]: {e}")
-            
-            if error_code in ['ModelNotReadyException', 'ServiceUnavailable']:
-                if attempt < max_retries - 1:
-                    wait_time = (2 ** attempt) * 2
-                    logger.info(f"SageMaker 재시도 대기: {wait_time}초")
-                    time.sleep(wait_time)
-                    # 재시도 전 워밍업 시도
-                    warm_sagemaker_endpoint()
-                    continue
-                else:
-                    raise RetryableError(f"SageMaker not ready after {max_retries} attempts: {e}")
-            else:
-                raise PermanentError(f"SageMaker permanent error: {e}")
-                
-        except Exception as e:
-            logger.error(f"SageMaker 예상치 못한 오류: {e}", exc_info=True)
-            if attempt < max_retries - 1:
-                wait_time = (2 ** attempt) * 2
-                time.sleep(wait_time)
-                continue
-            else:
-                raise RetryableError(f"SageMaker unexpected error: {e}")
-    
-    raise RetryableError(f"SageMaker 호출이 {max_retries}회 모두 실패")
 
 def handler(event, context):
     run_id = event['run_id']
@@ -312,7 +244,7 @@ def handler(event, context):
             else:
                 raise RetryableError(f"S3 접근 오류: {e}")
 
-        upscaled_image_bytes = invoke_sagemaker_with_retry(image_bytes)
+        upscaled_image_bytes = invoke_sagemaker_with_retry(image_bytes, run_id, image_key)
         
         upscaled_image_key = f"upscaled/{os.path.basename(image_key)}"
         try:

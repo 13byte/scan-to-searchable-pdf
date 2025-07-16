@@ -43,6 +43,15 @@ resource "aws_ecr_repository" "trigger_pipeline_lambda" {
   tags = { Project = var.project_name }
 }
 
+resource "aws_ecr_repository" "pdf_generator_lambda" {
+  name                 = "${var.project_name}/pdf-generator"
+  image_tag_mutability = "MUTABLE"
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+  tags = { Project = var.project_name }
+}
+
 resource "aws_ecr_lifecycle_policy" "default_policy" {
   for_each = {
     fargate          = aws_ecr_repository.fargate_processor.name
@@ -50,6 +59,7 @@ resource "aws_ecr_lifecycle_policy" "default_policy" {
     detect_skew      = aws_ecr_repository.detect_skew_lambda.name
     process_ocr      = aws_ecr_repository.process_ocr_lambda.name
     trigger_pipeline = aws_ecr_repository.trigger_pipeline_lambda.name
+    pdf_generator    = aws_ecr_repository.pdf_generator_lambda.name
   }
   repository = each.value
 
