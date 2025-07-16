@@ -140,7 +140,7 @@ resource "aws_lambda_function" "pdf_generator" {
   memory_size      = 1536
   filename         = data.archive_file.pdf_generator.output_path
   source_code_hash = data.archive_file.pdf_generator.output_base64sha256
-  layers           = [aws_lambda_layer_version.pdf_dependencies.arn]
+  layers           = [aws_lambda_layer_version.common_dependencies.arn]
 
   environment {
     variables = {
