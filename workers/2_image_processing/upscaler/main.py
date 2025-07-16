@@ -20,6 +20,7 @@ retry_config = Config(
 s3_client = boto3.client('s3', config=retry_config)
 sagemaker_runtime = boto3.client('sagemaker-runtime', config=retry_config)
 dynamodb = boto3.resource('dynamodb', config=retry_config)
+cloudwatch_client = boto3.client('cloudwatch')
 
 DYNAMODB_TABLE_NAME = os.environ['DYNAMODB_STATE_TABLE']
 SAGEMAKER_ENDPOINT_NAME = os.environ['SAGEMAKER_ENDPOINT_NAME']
@@ -132,6 +133,7 @@ def handler(event, context):
         update_job_status(run_id, image_key, 'PROCESSING')
         logger.info(f"{corrected_image_key} 업스케일링 시작.")
         
+        start_time = time.time()
         try:
             response = s3_client.get_object(Bucket=temp_bucket, Key=corrected_image_key)
             image_bytes = response['Body'].read()
@@ -157,6 +159,24 @@ def handler(event, context):
         
         result = {'upscaled_image_key': upscaled_image_key}
         update_job_status(run_id, image_key, 'COMPLETED', output=result)
+        
+        end_time = time.time()
+        processing_latency = (end_time - start_time) * 1000
+        cloudwatch_client.put_metric_data(
+            Namespace='BookScan/Processing',
+            MetricData=[
+                {
+                    'MetricName': 'ProcessingLatency',
+                    'Dimensions': [
+                        {'Name': 'RunId', 'Value': run_id},
+                        {'Name': 'ImageKey', 'Value': image_key}
+                    ],
+                    'Value': processing_latency,
+                    'Unit': 'Milliseconds'
+                }
+            ]
+        )
+        logger.info(f"ProcessingLatency: {processing_latency:.2f}ms")
         
         logger.info(f"{image_key} 업스케일링 성공, 출력 경로: {upscaled_image_key}")
         return result

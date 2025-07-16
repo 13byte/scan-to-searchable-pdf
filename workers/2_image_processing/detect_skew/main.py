@@ -13,11 +13,14 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 import backoff
 from secrets_cache import get_cached_secret
 
+import time
+
 logger = Logger(service="detect-skew")
 tracer = Tracer(service="detect-skew")
 
 s3_client = boto3.client('s3')
 dynamodb = boto3.resource('dynamodb')
+cloudwatch_client = boto3.client('cloudwatch')
 
 DYNAMODB_TABLE_NAME = os.environ['DYNAMODB_STATE_TABLE']
 GOOGLE_SECRET_NAME = os.environ.get('GOOGLE_SECRET_NAME')
@@ -30,7 +33,31 @@ def get_vision_client():
     global vision_client
     if vision_client is None:
         logger.info("Vision 클라이언트 보안 캐싱 초기화")
+        start_time = time.time()
         credentials = get_cached_secret(GOOGLE_SECRET_NAME)
+        end_time = time.time()
+        cache_miss = 1 if credentials is None else 0
+        cloudwatch_client.put_metric_data(
+            Namespace='BookScan/Security',
+            MetricData=[
+                {
+                    'MetricName': 'SecretsCacheMissRate',
+                    'Dimensions': [
+                        {'Name': 'SecretName', 'Value': GOOGLE_SECRET_NAME}
+                    ],
+                    'Value': cache_miss,
+                    'Unit': 'Count'
+                },
+                {
+                    'MetricName': 'SecretsFetchLatency',
+                    'Dimensions': [
+                        {'Name': 'SecretName', 'Value': GOOGLE_SECRET_NAME}
+                    ],
+                    'Value': (end_time - start_time) * 1000,
+                    'Unit': 'Milliseconds'
+                }
+            ]
+        )
         if not credentials:
             raise Exception("Google 자격 증명 가져오기 실패")
         creds = service_account.Credentials.from_service_account_info(credentials)
@@ -122,6 +149,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
 
     update_job_status(run_id, image_key, 'PROCESSING')
 
+    start_time = time.time()
     try:
         with tracer.subsegment("fetch_s3_image"):
             image_content = s3_client.get_object(Bucket=input_bucket, Key=image_key)['Body'].read()
@@ -140,6 +168,24 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             "image_size": len(image_content),
             "attempts": attempts
         })
+        
+        end_time = time.time()
+        processing_latency = (end_time - start_time) * 1000
+        cloudwatch_client.put_metric_data(
+            Namespace='BookScan/Processing',
+            MetricData=[
+                {
+                    'MetricName': 'ProcessingLatency',
+                    'Dimensions': [
+                        {'Name': 'RunId', 'Value': run_id},
+                        {'Name': 'ImageKey', 'Value': image_key}
+                    ],
+                    'Value': processing_latency,
+                    'Unit': 'Milliseconds'
+                }
+            ]
+        )
+        logger.info(f"ProcessingLatency: {processing_latency:.2f}ms")
         
         return result
 

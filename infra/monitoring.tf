@@ -43,3 +43,17 @@ resource "aws_cloudwatch_log_metric_filter" "vision_api_quota_exceeded" {
 
   depends_on = [aws_cloudwatch_log_group.lambda_logs]
 }
+
+resource "aws_cloudwatch_metric_alarm" "vision_api_quota_exceeded_alarm" {
+  alarm_name          = "${var.project_name}-vision-api-quota-exceeded"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "1"
+  metric_name         = "VisionAPIQuotaExceeded"
+  namespace           = "BookScan/Errors"
+  period              = "60"
+  statistic           = "Sum"
+  threshold           = "0"
+  alarm_description   = "Google Vision API 할당량 초과 오류 발생"
+  alarm_actions       = [var.sns_topic_arn]
+  treat_missing_data  = "notBreaching"
+}
