@@ -2,9 +2,13 @@ resource "null_resource" "build_pdf_layer" {
   triggers = {
     requirements_hash = filemd5("${path.module}/../workers/3_finalization/pdf_generator/requirements.txt")
     font_hash         = filemd5("${path.module}/../config/NotoSansKR-Regular.ttf")
+    orchestrator_req_hash = filemd5("${path.module}/../workers/1_orchestration/orchestrator/requirements.txt")
+    initialize_state_req_hash = filemd5("${path.module}/../workers/1_orchestration/initialize_state/requirements.txt")
+    upscaler_req_hash = filemd5("${path.module}/../workers/2_image_processing/upscaler/requirements.txt")
+    summary_generator_req_hash = filemd5("${path.module}/../workers/3_finalization/summary_generator/requirements.txt")
   }
   provisioner "local-exec" {
-    command = "pip install -r ${path.module}/../workers/3_finalization/pdf_generator/requirements.txt -t ${path.module}/../build/lambda-layer/python && cp ${path.module}/../config/NotoSansKR-Regular.ttf ${path.module}/../build/lambda-layer/python/NotoSansKR-Regular.ttf && zip -r ${path.module}/../build/pdf-dependencies-layer.zip ${path.module}/../build/lambda-layer"
+    command = "${path.module}/../scripts/build_lambda_layer.sh"
   }
 }
 
