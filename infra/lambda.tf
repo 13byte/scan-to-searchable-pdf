@@ -90,6 +90,7 @@ resource "aws_lambda_function" "orchestrator" {
   environment {
     variables = {
       DYNAMODB_STATE_TABLE = aws_dynamodb_table.state_tracking.name
+      EVENT_BUS_NAME       = aws_cloudwatch_event_bus.main.name
       MAX_BATCH_SIZE       = var.max_batch_size
       MIN_BATCH_SIZE       = var.min_batch_size
     }

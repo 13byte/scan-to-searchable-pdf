@@ -1,6 +1,7 @@
 import os
 import json
 import boto3
+import psutil
 from boto3.dynamodb.conditions import Key
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.logging import Logger
