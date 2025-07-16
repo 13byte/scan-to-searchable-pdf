@@ -15,7 +15,7 @@ mkdir -p "$PYTHON_DIR"
 
 # requirements.txt에서 의존성 설치
 cd "$PYTHON_DIR"
-pip3 install --platform manylinux2014_aarch64 --target . --python-version 3.12 --only-binary=:all: reportlab Pillow
+pip3 install --platform manylinux2014_aarch64 --target . --python-version 3.12 --only-binary=:all: reportlab Pillow aws-lambda-powertools
 
 # Layer ZIP 파일 생성
 cd "$LAYER_DIR"

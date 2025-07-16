@@ -8,7 +8,7 @@ resource "null_resource" "build_pdf_layer" {
   }
 }
 
-resource "aws_lambda_layer_version" "pdf_dependencies" {
+resource "aws_lambda_layer_version" "common_dependencies" {
   filename                 = "${path.module}/../build/pdf-dependencies-layer.zip"
   layer_name               = "${var.project_name}-pdf-dependencies"
   compatible_runtimes      = ["python3.12"]
@@ -74,6 +74,7 @@ resource "aws_lambda_function" "initialize_state" {
     }
   }
   depends_on = [aws_cloudwatch_log_group.lambda_logs["initialize_state"]]
+  layers           = [aws_lambda_layer_version.common_dependencies.arn]
 }
 
 resource "aws_lambda_function" "orchestrator" {
@@ -94,6 +95,7 @@ resource "aws_lambda_function" "orchestrator" {
     }
   }
   depends_on = [aws_cloudwatch_log_group.lambda_logs["orchestrator"]]
+  layers           = [aws_lambda_layer_version.common_dependencies.arn]
 }
 
 resource "aws_lambda_function" "upscaler" {
