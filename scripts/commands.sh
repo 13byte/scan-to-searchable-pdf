@@ -58,6 +58,7 @@ deploy)
   DETECT_SKEW_LAMBDA_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/detect-skew"
   PROCESS_OCR_LAMBDA_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/process-ocr"
   TRIGGER_PIPELINE_LAMBDA_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/trigger-pipeline"
+  SAGEMAKER_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/sagemaker-realesrgan"
 
   FARGATE_IMAGE_TAG=$(build_and_push "workers/2_image_processing/skew_corrector/Dockerfile" "$FARGATE_ECR_REPO" "." "--platform linux/arm64")
   DETECT_SKEW_LAMBDA_IMAGE_TAG=$(build_and_push "docker/detect-skew/Dockerfile" "$DETECT_SKEW_LAMBDA_ECR_REPO" "." "--platform linux/arm64")
