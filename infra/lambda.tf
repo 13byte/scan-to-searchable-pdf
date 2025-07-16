@@ -5,11 +5,6 @@ data "archive_file" "initialize_state" {
   source_dir  = "${path.module}/../workers/1_orchestration/initialize_state"
   output_path = "${path.module}/../dist/initialize_state.zip"
 }
-data "archive_file" "orchestrator" {
-  type        = "zip"
-  source_dir  = "${path.module}/../workers/1_orchestration/orchestrator"
-  output_path = "${path.module}/../dist/orchestrator.zip"
-}
 data "archive_file" "upscaler" {
   type        = "zip"
   source_dir  = "${path.module}/../workers/2_image_processing/upscaler"
@@ -19,6 +14,7 @@ data "archive_file" "summary_generator" {
   type        = "zip"
   source_dir  = "${path.module}/../workers/3_finalization/summary_generator"
   output_path = "${path.module}/../dist/summary_generator.zip"
+}
 }
 
 resource "aws_cloudwatch_log_group" "lambda_logs" {
@@ -58,13 +54,11 @@ resource "aws_lambda_function" "initialize_state" {
 resource "aws_lambda_function" "orchestrator" {
   function_name    = "${var.project_name}-orchestrator"
   role             = aws_iam_role.lambda_fargate_base_role.arn
-  handler          = "main.handler"
-  runtime          = "python3.12"
+  package_type     = "Image"
+  image_uri        = "${aws_ecr_repository.orchestrator_lambda.repository_url}:${var.orchestrator_lambda_image_tag}"
   architectures    = ["arm64"]
   timeout          = 60
   memory_size      = 256
-  filename         = data.archive_file.orchestrator.output_path
-  source_code_hash = data.archive_file.orchestrator.output_base64sha256
   environment {
     variables = {
       DYNAMODB_STATE_TABLE = aws_dynamodb_table.state_tracking.name

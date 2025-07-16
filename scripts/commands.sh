@@ -57,7 +57,8 @@ deploy)
     -target=aws_ecr_repository.detect_skew_lambda \
     -target=aws_ecr_repository.process_ocr_lambda \
     -target=aws_ecr_repository.trigger_pipeline_lambda \
-    -target=aws_ecr_repository.pdf_generator_lambda)
+    -target=aws_ecr_repository.pdf_generator_lambda \
+    -target=aws_ecr_repository.orchestrator_lambda)
 
   log_info "Building and pushing Docker images..."
   FARGATE_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/skew-corrector"
@@ -65,6 +66,7 @@ deploy)
   PROCESS_OCR_LAMBDA_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/process-ocr"
   TRIGGER_PIPELINE_LAMBDA_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/trigger-pipeline"
   PDF_GENERATOR_LAMBDA_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/pdf-generator"
+  ORCHESTRATOR_LAMBDA_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/orchestrator"
   SAGEMAKER_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/sagemaker-realesrgan"
 
   FARGATE_IMAGE_TAG=$(build_and_push "workers/2_image_processing/skew_corrector/Dockerfile" "$FARGATE_ECR_REPO" "." "--platform linux/arm64")
@@ -72,6 +74,7 @@ deploy)
   PROCESS_OCR_LAMBDA_IMAGE_TAG=$(build_and_push "docker/process-ocr/Dockerfile" "$PROCESS_OCR_LAMBDA_ECR_REPO" "." "--platform linux/arm64")
   TRIGGER_PIPELINE_LAMBDA_IMAGE_TAG=$(build_and_push "docker/trigger-pipeline/Dockerfile" "$TRIGGER_PIPELINE_LAMBDA_ECR_REPO" "." "--platform linux/arm64")
   PDF_GENERATOR_LAMBDA_IMAGE_TAG=$(build_and_push "docker/pdf-generator/Dockerfile" "$PDF_GENERATOR_LAMBDA_ECR_REPO" "." "--platform linux/arm64")
+  ORCHESTRATOR_LAMBDA_IMAGE_TAG=$(build_and_push "docker/orchestrator/Dockerfile" "$ORCHESTRATOR_LAMBDA_ECR_REPO" "." "--platform linux/arm64")
   SAGEMAKER_IMAGE_TAG=$(build_and_push "sagemaker/Dockerfile" "$SAGEMAKER_ECR_REPO" "." "--platform linux/amd64")
 
   log_info "Deploying the rest of the AWS resources..."
@@ -81,6 +84,7 @@ deploy)
     -var="process_ocr_lambda_image_tag=${PROCESS_OCR_LAMBDA_IMAGE_TAG}" \
     -var="trigger_pipeline_lambda_image_tag=${TRIGGER_PIPELINE_LAMBDA_IMAGE_TAG}" \
     -var="pdf_generator_lambda_image_tag=${PDF_GENERATOR_LAMBDA_IMAGE_TAG}" \
+    -var="orchestrator_lambda_image_tag=${ORCHESTRATOR_LAMBDA_IMAGE_TAG}" \
     -var="sagemaker_image_tag=${SAGEMAKER_IMAGE_TAG}")
 
   log_success "Infrastructure deployment completed successfully."

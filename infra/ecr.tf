@@ -52,6 +52,15 @@ resource "aws_ecr_repository" "pdf_generator_lambda" {
   tags = { Project = var.project_name }
 }
 
+resource "aws_ecr_repository" "orchestrator_lambda" {
+  name                 = "${var.project_name}/orchestrator"
+  image_tag_mutability = "MUTABLE"
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+  tags = { Project = var.project_name }
+}
+
 resource "aws_ecr_lifecycle_policy" "default_policy" {
   for_each = {
     fargate          = aws_ecr_repository.fargate_processor.name
@@ -60,6 +69,7 @@ resource "aws_ecr_lifecycle_policy" "default_policy" {
     process_ocr      = aws_ecr_repository.process_ocr_lambda.name
     trigger_pipeline = aws_ecr_repository.trigger_pipeline_lambda.name
     pdf_generator    = aws_ecr_repository.pdf_generator_lambda.name
+    orchestrator     = aws_ecr_repository.orchestrator_lambda.name
   }
   repository = each.value
 
