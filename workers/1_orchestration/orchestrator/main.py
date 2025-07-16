@@ -93,11 +93,6 @@ def calculate_dynamic_batch_size(run_id: str) -> int:
         )
         
         return max(MIN_BATCH_SIZE, min(MAX_BATCH_SIZE, batch_size))
-        else:
-            factor = (60 - avg_latency) / 50
-            batch_size = MIN_BATCH_SIZE + int((MAX_BATCH_SIZE - MIN_BATCH_SIZE) * factor)
-            
-        return max(MIN_BATCH_SIZE, min(MAX_BATCH_SIZE, batch_size))
         
     except Exception as e:
         logger.warning(f"배치 크기 계산 실패, 기본값 사용: {e}")
