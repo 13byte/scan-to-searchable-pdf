@@ -11,12 +11,12 @@ from google.oauth2 import service_account
 from aws_lambda_powertools import Logger, Tracer
 from aws_lambda_powertools.utilities.typing import LambdaContext
 import backoff
+from secrets_cache import get_cached_secret
 
 logger = Logger(service="detect-skew")
 tracer = Tracer(service="detect-skew")
 
 s3_client = boto3.client('s3')
-secrets_client = boto3.client('secretsmanager')
 dynamodb = boto3.resource('dynamodb')
 
 DYNAMODB_TABLE_NAME = os.environ['DYNAMODB_STATE_TABLE']
@@ -26,12 +26,13 @@ MAX_RETRIES = 3
 vision_client = None
 
 def get_vision_client():
-    """Google Vision 클라이언트 초기화"""
+    """Google Vision 클라이언트 보안 캐싱 초기화"""
     global vision_client
     if vision_client is None:
-        logger.info("Vision 클라이언트 초기화")
-        secret = secrets_client.get_secret_value(SecretId=GOOGLE_SECRET_NAME)
-        credentials = json.loads(secret['SecretString'])
+        logger.info("Vision 클라이언트 보안 캐싱 초기화")
+        credentials = get_cached_secret(GOOGLE_SECRET_NAME)
+        if not credentials:
+            raise Exception("Google 자격 증명 가져오기 실패")
         creds = service_account.Credentials.from_service_account_info(credentials)
         vision_client = vision.ImageAnnotatorClient(credentials=creds)
     return vision_client

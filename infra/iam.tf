@@ -19,7 +19,7 @@ resource "aws_iam_role" "lambda_fargate_base_role" {
 
 resource "aws_iam_policy" "lambda_fargate_sagemaker_invoke_policy" {
   name        = "${var.project_name}-lambda-fargate-sagemaker-invoke-policy"
-  description = "Lambda 및 Fargate가 SageMaker 엔드포인트를 호출하기 위한 정책."
+  description = "Lambda 및 Fargate가 SageMaker 엔드포인트를 호출하기 위한 최소 권한 정책"
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
@@ -28,6 +28,21 @@ resource "aws_iam_policy" "lambda_fargate_sagemaker_invoke_policy" {
         Action = [
           "sagemaker:InvokeEndpoint"
         ],
+        Resource = "arn:aws:sagemaker:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:endpoint/${var.project_name}-*"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ],
+        Resource = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:${var.project_name}-*"
+      }
+    ]
+  })
+}
+
+data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
         Resource = aws_sagemaker_endpoint.realesrgan.arn
       }
     ]
