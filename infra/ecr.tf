@@ -1,6 +1,6 @@
 resource "aws_ecr_repository" "fargate_processor" {
   name                 = "${var.project_name}/skew-corrector"
-  image_tag_mutability = "IMMUTABLE"
+  image_tag_mutability = "MUTABLE"
   image_scanning_configuration {
     scan_on_push = true
   }
@@ -9,7 +9,7 @@ resource "aws_ecr_repository" "fargate_processor" {
 
 resource "aws_ecr_repository" "sagemaker_realesrgan" {
   name                 = "${var.project_name}/sagemaker-realesrgan"
-  image_tag_mutability = "IMMUTABLE"
+  image_tag_mutability = "MUTABLE"
   image_scanning_configuration {
     scan_on_push = true
   }
@@ -18,7 +18,7 @@ resource "aws_ecr_repository" "sagemaker_realesrgan" {
 
 resource "aws_ecr_repository" "detect_skew_lambda" {
   name                 = "${var.project_name}/detect-skew"
-  image_tag_mutability = "IMMUTABLE"
+  image_tag_mutability = "MUTABLE"
   image_scanning_configuration {
     scan_on_push = true
   }
@@ -27,7 +27,7 @@ resource "aws_ecr_repository" "detect_skew_lambda" {
 
 resource "aws_ecr_repository" "process_ocr_lambda" {
   name                 = "${var.project_name}/process-ocr"
-  image_tag_mutability = "IMMUTABLE"
+  image_tag_mutability = "MUTABLE"
   image_scanning_configuration {
     scan_on_push = true
   }
@@ -36,7 +36,7 @@ resource "aws_ecr_repository" "process_ocr_lambda" {
 
 resource "aws_ecr_repository" "trigger_pipeline_lambda" {
   name                 = "${var.project_name}/trigger-pipeline"
-  image_tag_mutability = "IMMUTABLE"
+  image_tag_mutability = "MUTABLE"
   image_scanning_configuration {
     scan_on_push = true
   }
