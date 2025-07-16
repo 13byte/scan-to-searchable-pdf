@@ -23,19 +23,19 @@ RUN mkdir -p /opt/ml/model
 
 # 의존성 파일 복사 및 uv로 설치
 # Install dependencies
-COPY requirements.txt .
+COPY sagemaker/requirements.txt .
 RUN uv pip install --system --no-cache -r requirements.txt
 
 # 모델 다운로더 실행
-COPY download_model.py .
+COPY sagemaker/download_model.py .
 # 빌드 시점에 모델을 /opt/ml/model 디렉토리에 다운로드
 RUN python download_model.py
 
 # 추론 코드 복사
-COPY inference.py .
+COPY sagemaker/inference.py .
 
 # Serve script for SageMaker
-COPY serve.sh .
+COPY sagemaker/serve.sh .
 
 # SageMaker가 사용할 포트 노출
 EXPOSE 8080

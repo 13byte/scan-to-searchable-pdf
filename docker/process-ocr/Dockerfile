@@ -11,7 +11,7 @@ RUN dnf update -y && \
   rm -rf /var/cache/yum
 
 # Copy requirements first for better caching
-COPY requirements.txt ${LAMBDA_TASK_ROOT}/
+COPY docker/process-ocr/requirements.txt ${LAMBDA_TASK_ROOT}/
 
 # Install Python dependencies with Google Cloud Vision
 RUN pip install uv && uv pip install --system --no-cache -r requirements.txt
@@ -20,7 +20,7 @@ RUN pip install uv && uv pip install --system --no-cache -r requirements.txt
 COPY workers/2_image_processing/detect_skew/secrets_cache.py ${LAMBDA_TASK_ROOT}/secrets_cache.py
 
 # Copy function code
-COPY main.py ${LAMBDA_TASK_ROOT}/lambda_function.py
+COPY docker/process-ocr/main.py ${LAMBDA_TASK_ROOT}/lambda_function.py
 
 # Set the default Lambda handler
 CMD ["lambda_function.lambda_handler"]

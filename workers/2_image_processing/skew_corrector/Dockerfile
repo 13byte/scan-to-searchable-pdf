@@ -10,11 +10,11 @@ RUN dnf update -y && dnf install -y \
 RUN pip install uv
 
 # Install dependencies
-COPY requirements.txt .
+COPY workers/2_image_processing/skew_corrector/requirements.txt .
 RUN uv pip install --system --no-cache -r requirements.txt
 
 # 애플리케이션 코드 복사
-COPY main.py requirements.txt ./
+COPY workers/2_image_processing/skew_corrector/main.py .
 
 # 환경 변수 설
 ENV PYTHONUNBUFFERED=1

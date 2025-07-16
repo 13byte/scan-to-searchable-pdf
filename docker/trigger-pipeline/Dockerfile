@@ -11,13 +11,13 @@ RUN dnf update -y && \
   rm -rf /var/cache/yum
 
 # Copy requirements first for better caching
-COPY requirements.txt ${LAMBDA_TASK_ROOT}/
+COPY docker/trigger-pipeline/requirements.txt ${LAMBDA_TASK_ROOT}/
 
 # Install Python dependencies with Google Cloud Vision
 RUN pip install uv && uv pip install --system --no-cache -r requirements.txt
 
 # Copy function code
-COPY main.py ${LAMBDA_TASK_ROOT}/lambda_function.py
+COPY docker/trigger-pipeline/main.py ${LAMBDA_TASK_ROOT}/lambda_function.py
 
 # Set the default Lambda handler
 CMD ["lambda_function.handler"]
