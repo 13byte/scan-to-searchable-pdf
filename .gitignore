@@ -27,6 +27,12 @@ config/*credentials*.json
 *.json.bak
 *.credentials
 
+# AWS Nuke 설정 파일 (민감한 계정 정보 포함)
+nuke-config.yml
+nuke-config.yaml
+*nuke*.yml
+*nuke*.yaml
+
 .terraform/
 .terraform.lock.hcl
 *.tfstate
