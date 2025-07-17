@@ -9,7 +9,7 @@ import backoff
 from typing import Dict, List, Any
 
 logger = Logger()
-metrics = Metrics()
+metrics = Metrics(namespace="BookScan/Processing")
 tracer = Tracer()
 
 dynamodb = boto3.resource('dynamodb')

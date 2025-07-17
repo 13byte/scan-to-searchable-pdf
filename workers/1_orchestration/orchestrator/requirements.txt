@@ -1,2 +1,2 @@
-aws-lambda-powertools==3.17.0
+aws-lambda-powertools[tracer]==3.17.0
 backoff>=2.2.0
