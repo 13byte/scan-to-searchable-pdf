@@ -7,7 +7,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools import Logger, Metrics, Tracer
 
 logger = Logger()
-metrics = Metrics()
+metrics = Metrics(namespace="BookScan/Processing")
 tracer = Tracer()
 
 dynamodb = boto3.resource('dynamodb')

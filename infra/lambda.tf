@@ -44,7 +44,8 @@ resource "aws_lambda_function" "initialize_state" {
   source_code_hash = data.archive_file.initialize_state.output_base64sha256
   environment {
     variables = {
-      DYNAMODB_STATE_TABLE = aws_dynamodb_table.state_tracking.name
+      DYNAMODB_STATE_TABLE        = aws_dynamodb_table.state_tracking.name
+      POWERTOOLS_METRICS_NAMESPACE = "BookScan/Processing"
     }
   }
   depends_on = [aws_cloudwatch_log_group.lambda_logs["initialize_state"]]
@@ -60,10 +61,11 @@ resource "aws_lambda_function" "orchestrator" {
   memory_size      = 256
   environment {
     variables = {
-      DYNAMODB_STATE_TABLE = aws_dynamodb_table.state_tracking.name
-      EVENT_BUS_NAME       = aws_cloudwatch_event_bus.main.name
-      MAX_BATCH_SIZE       = var.max_batch_size
-      MIN_BATCH_SIZE       = var.min_batch_size
+      DYNAMODB_STATE_TABLE          = aws_dynamodb_table.state_tracking.name
+      EVENT_BUS_NAME                = aws_cloudwatch_event_bus.main.name
+      MAX_BATCH_SIZE                = var.max_batch_size
+      MIN_BATCH_SIZE                = var.min_batch_size
+      POWERTOOLS_METRICS_NAMESPACE  = "BookScan/Processing"
     }
   }
   depends_on = [aws_cloudwatch_log_group.lambda_logs["orchestrator"]]
@@ -83,10 +85,11 @@ resource "aws_lambda_function" "upscaler" {
 
   environment {
     variables = {
-      DYNAMODB_STATE_TABLE    = aws_dynamodb_table.state_tracking.name
-      SAGEMAKER_ENDPOINT_NAME = aws_sagemaker_endpoint.realesrgan.name
-      LOG_LEVEL               = "INFO"
-      POWERTOOLS_SERVICE_NAME = "upscaler"
+      DYNAMODB_STATE_TABLE          = aws_dynamodb_table.state_tracking.name
+      SAGEMAKER_ENDPOINT_NAME       = aws_sagemaker_endpoint.realesrgan.name
+      LOG_LEVEL                     = "INFO"
+      POWERTOOLS_SERVICE_NAME       = "upscaler"
+      POWERTOOLS_METRICS_NAMESPACE  = "BookScan/Processing"
     }
   }
 
@@ -114,11 +117,12 @@ resource "aws_lambda_function" "pdf_generator" {
 
   environment {
     variables = {
-      DYNAMODB_STATE_TABLE    = aws_dynamodb_table.state_tracking.name
-      OUTPUT_BUCKET           = aws_s3_bucket.output.id
-      TEMP_BUCKET             = aws_s3_bucket.temp.id
-      LOG_LEVEL               = "INFO"
-      POWERTOOLS_SERVICE_NAME = "pdf-generator"
+      DYNAMODB_STATE_TABLE          = aws_dynamodb_table.state_tracking.name
+      OUTPUT_BUCKET                 = aws_s3_bucket.output.id
+      TEMP_BUCKET                   = aws_s3_bucket.temp.id
+      LOG_LEVEL                     = "INFO"
+      POWERTOOLS_SERVICE_NAME       = "pdf-generator"
+      POWERTOOLS_METRICS_NAMESPACE  = "BookScan/Processing"
     }
   }
 
@@ -145,8 +149,9 @@ resource "aws_lambda_function" "summary_generator" {
   source_code_hash = data.archive_file.summary_generator.output_base64sha256
   environment {
     variables = {
-      OUTPUT_BUCKET        = aws_s3_bucket.output.id
-      DYNAMODB_STATE_TABLE = aws_dynamodb_table.state_tracking.name
+      OUTPUT_BUCKET                 = aws_s3_bucket.output.id
+      DYNAMODB_STATE_TABLE          = aws_dynamodb_table.state_tracking.name
+      POWERTOOLS_METRICS_NAMESPACE  = "BookScan/Processing"
     }
   }
   depends_on = [aws_cloudwatch_log_group.lambda_logs["summary_generator"]]
@@ -164,10 +169,11 @@ resource "aws_lambda_function" "detect_skew" {
 
   environment {
     variables = {
-      DYNAMODB_STATE_TABLE    = aws_dynamodb_table.state_tracking.name
-      GOOGLE_SECRET_NAME      = aws_secretsmanager_secret.google_credentials.name
-      LOG_LEVEL               = "INFO"
-      POWERTOOLS_SERVICE_NAME = "detect-skew"
+      DYNAMODB_STATE_TABLE          = aws_dynamodb_table.state_tracking.name
+      GOOGLE_SECRET_NAME            = aws_secretsmanager_secret.google_credentials.name
+      LOG_LEVEL                     = "INFO"
+      POWERTOOLS_SERVICE_NAME       = "detect-skew"
+      POWERTOOLS_METRICS_NAMESPACE  = "BookScan/Processing"
     }
   }
 
@@ -196,10 +202,11 @@ resource "aws_lambda_function" "process_ocr" {
 
   environment {
     variables = {
-      DYNAMODB_STATE_TABLE    = aws_dynamodb_table.state_tracking.name
-      GOOGLE_SECRET_NAME      = aws_secretsmanager_secret.google_credentials.name
-      LOG_LEVEL               = "INFO"
-      POWERTOOLS_SERVICE_NAME = "process-ocr"
+      DYNAMODB_STATE_TABLE          = aws_dynamodb_table.state_tracking.name
+      GOOGLE_SECRET_NAME            = aws_secretsmanager_secret.google_credentials.name
+      LOG_LEVEL                     = "INFO"
+      POWERTOOLS_SERVICE_NAME       = "process-ocr"
+      POWERTOOLS_METRICS_NAMESPACE  = "BookScan/Processing"
     }
   }
 
@@ -227,7 +234,8 @@ resource "aws_lambda_function" "trigger_pipeline" {
 
   environment {
     variables = {
-      TEMP_BUCKET = aws_s3_bucket.temp.id
+      TEMP_BUCKET                   = aws_s3_bucket.temp.id
+      POWERTOOLS_METRICS_NAMESPACE  = "BookScan/Processing"
     }
   }
 
