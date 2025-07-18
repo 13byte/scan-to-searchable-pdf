@@ -34,12 +34,6 @@ variable "process_ocr_lambda_image_tag" {
   default     = "latest"
 }
 
-variable "trigger_pipeline_lambda_image_tag" {
-  description = "Trigger Pipeline Lambda 컨테이너 이미지 태그."
-  type        = string
-  default     = "latest"
-}
-
 variable "pdf_generator_lambda_image_tag" {
   description = "PDF Generator Lambda 컨테이너 이미지 태그."
   type        = string

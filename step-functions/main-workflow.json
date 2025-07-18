@@ -6,7 +6,7 @@
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": {
-        "FunctionName": "${trigger_pipeline_lambda_arn}",
+        "FunctionName": "${initialize_state_lambda_arn}",
         "Payload": {
           "s3_bucket.$": "$.input_bucket",
           "s3_prefix.$": "$.input_prefix"

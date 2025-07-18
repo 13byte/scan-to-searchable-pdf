@@ -25,7 +25,6 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
     summary_generator = "summary_generator"
     detect_skew       = "detect_skew"
     process_ocr       = "process_ocr"
-    trigger_pipeline  = "trigger_pipeline"
   }
   name              = "/aws/lambda/${var.project_name}-${each.value}"
   retention_in_days = 7
@@ -221,27 +220,4 @@ resource "aws_lambda_function" "process_ocr" {
   depends_on = [aws_cloudwatch_log_group.lambda_logs["process_ocr"],
     aws_sagemaker_endpoint.realesrgan # 명시적 의존성 추가
   ]
-}
-
-resource "aws_lambda_function" "trigger_pipeline" {
-  function_name = "${var.project_name}-trigger-pipeline"
-  role          = aws_iam_role.lambda_fargate_base_role.arn
-  package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.trigger_pipeline_lambda.repository_url}:${var.trigger_pipeline_lambda_image_tag}"
-  architectures = ["arm64"]
-  timeout       = 60
-  memory_size   = 256
-
-  environment {
-    variables = {
-      TEMP_BUCKET                   = aws_s3_bucket.temp.id
-      POWERTOOLS_METRICS_NAMESPACE  = "BookScan/Processing"
-    }
-  }
-
-  tracing_config {
-    mode = "Active"
-  }
-
-  depends_on = [aws_cloudwatch_log_group.lambda_logs["trigger_pipeline"]]
 }

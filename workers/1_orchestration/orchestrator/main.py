@@ -118,16 +118,34 @@ def query_pending_tasks(run_id: str, batch_size: int) -> List[Dict[str, Any]]:
     # 백업: 기존 run-status-index 사용
     if not all_images:
         logger.info("샤드 쿼리 실패, 기존 인덱스 사용")
-        initialized_response = state_table.query(
-            IndexName='run-status-index',
-            KeyConditionExpression=Key('run_id').eq(run_id) & Key('job_status').eq('INITIALIZED')
-        )
-        failed_response = state_table.query(
-            IndexName='run-status-index', 
-            KeyConditionExpression=Key('run_id').eq(run_id) & Key('job_status').eq('FAILED')
-        )
-        all_images = ([item for item in initialized_response.get('Items', []) if not item.get('is_cover', False)] +
-                     [item for item in failed_response.get('Items', []) if not item.get('is_cover', False)])
+        try:
+            initialized_response = state_table.query(
+                IndexName='run-status-index',
+                KeyConditionExpression=Key('run_id').eq(run_id) & Key('job_status').eq('INITIALIZED')
+            )
+            failed_response = state_table.query(
+                IndexName='run-status-index', 
+                KeyConditionExpression=Key('run_id').eq(run_id) & Key('job_status').eq('FAILED')
+            )
+            all_images = ([item for item in initialized_response.get('Items', []) if not item.get('is_cover', False)] +
+                         [item for item in failed_response.get('Items', []) if not item.get('is_cover', False)])
+        except Exception as e:
+            logger.warning(f"기존 인덱스 쿼리도 실패: {e}")
+            # 마지막 백업: 모든 이미지 스캔하여 INITIALIZED 상태 찾기
+            try:
+                scan_response = state_table.scan(
+                    FilterExpression='run_id = :run_id AND job_status IN (:init, :fail) AND is_cover = :cover',
+                    ExpressionAttributeValues={
+                        ':run_id': run_id,
+                        ':init': 'INITIALIZED',
+                        ':fail': 'FAILED',
+                        ':cover': False
+                    }
+                )
+                all_images = scan_response.get('Items', [])
+            except Exception as scan_e:
+                logger.error(f"스캔 쿼리도 실패: {scan_e}")
+                all_images = []
     
     # 우선순위 정렬 후 배치 크기만큼 반환
     return sorted(all_images, key=lambda x: x.get('priority', 0))[:batch_size]
@@ -187,7 +205,49 @@ def handler(event: dict, context: LambdaContext) -> dict:
 
     try:
         workflow_status_item = get_workflow_status(run_id)
+        
+        # check_only 플래그 처리 (EventBridge 완료 확인용)
+        if event.get('check_only', False):
+            if not workflow_status_item:
+                logger.warning(f"check_only 모드: 워크플로우 상태 없음. run_id={run_id}")
+                return {
+                    'run_id': run_id,
+                    'is_work_done': False,
+                    'batch_to_process': [],
+                    'input_bucket': input_bucket,
+                    'temp_bucket': temp_bucket,
+                    'output_bucket': output_bucket
+                }
+        
         total_initialized_images = workflow_status_item.get('total_images', 0)
+        
+        # CRITICAL: TriggerPipeline 완료 대기 로직 개선
+        if not workflow_status_item:
+            logger.info(f"워크플로우 상태 아직 초기화되지 않음: run_id={run_id}")
+            return {
+                'run_id': run_id,
+                'is_work_done': False,
+                'batch_to_process': [],
+                'input_bucket': input_bucket,
+                'temp_bucket': temp_bucket,
+                'output_bucket': output_bucket
+            }
+        
+        # 이미지가 없는 경우 처리
+        if total_initialized_images == 0:
+            if workflow_status_item.get('job_status') == 'NO_IMAGES_FOUND':
+                logger.error(f"처리할 이미지가 없습니다: run_id={run_id}")
+                raise ValueError("처리할 이미지가 없습니다.")
+            else:
+                logger.info(f"이미지 초기화 진행 중: run_id={run_id}")
+                return {
+                    'run_id': run_id,
+                    'is_work_done': False,
+                    'batch_to_process': [],
+                    'input_bucket': input_bucket,
+                    'temp_bucket': temp_bucket,
+                    'output_bucket': output_bucket
+                }
         
         batch_size = calculate_dynamic_batch_size(run_id)
         logger.info(f"run_id {run_id} 오케스트레이션 시작. 배치 크기: {batch_size}")
@@ -196,13 +256,15 @@ def handler(event: dict, context: LambdaContext) -> dict:
         
         if not tasks_to_process:
             # 처리할 작업이 없는 경우, 모든 이미지가 처리되었는지 확인
-            processed_count_response = dynamodb.Table(DYNAMODB_TABLE_NAME).query(
+            completed_count_response = dynamodb.Table(DYNAMODB_TABLE_NAME).query(
                 IndexName='run-status-index',
-                KeyConditionExpression=Key('run_id').eq(run_id) & Key('job_status').eq('PROCESSED')
+                KeyConditionExpression=Key('run_id').eq(run_id) & Key('job_status').eq('COMPLETED')
             )
-            processed_images = [item for item in processed_count_response.get('Items', []) if not item.get('is_cover', False)]
+            completed_images = [item for item in completed_count_response.get('Items', []) if not item.get('is_cover', False)]
             
-            if len(processed_images) == total_initialized_images - workflow_status_item.get('skipped_images', 0): # 스킵된 이미지 수 고려
+            expected_completed_count = total_initialized_images - workflow_status_item.get('skipped_images', 0)
+            
+            if len(completed_images) == expected_completed_count and expected_completed_count > 0:
                 logger.info("모든 이미지가 성공적으로 처리되었습니다. PDF 생성을 시작합니다.")
                 publish_completion_event(run_id, True)
                 return {
@@ -214,12 +276,12 @@ def handler(event: dict, context: LambdaContext) -> dict:
                     'output_bucket': output_bucket
                 }
             else:
-                logger.info("처리 대기 중인 이미지는 없지만, 아직 모든 이미지가 처리되지 않았습니다. 다음 오케스트레이션 주기를 기다립니다.")
-                publish_completion_event(run_id, False) # 아직 완료되지 않았음을 알림
+                logger.info(f"처리 대기 중인 이미지는 없지만, 아직 모든 이미지가 처리되지 않았습니다. 처리완료={len(completed_images)}, 예상={expected_completed_count}")
+                publish_completion_event(run_id, False)
                 return {
                     'run_id': run_id,
                     'is_work_done': False,
-                    'batch_to_process': [], # 빈 배치 반환하여 Map 상태가 실행되지 않도록 함
+                    'batch_to_process': [],
                     'input_bucket': input_bucket,
                     'temp_bucket': temp_bucket,
                     'output_bucket': output_bucket

@@ -2,7 +2,6 @@ resource "aws_sfn_state_machine" "book_scan_workflow" {
   name     = "${var.project_name}-main-workflow"
   role_arn = aws_iam_role.step_functions_role.arn
   definition = templatefile("${path.module}/../step-functions/main-workflow.json", {
-    trigger_pipeline_lambda_arn = aws_lambda_function.trigger_pipeline.arn
     initialize_state_lambda_arn = aws_lambda_function.initialize_state.arn
     orchestrator_lambda_arn     = aws_lambda_function.orchestrator.arn
 
@@ -28,7 +27,6 @@ resource "aws_sfn_state_machine" "book_scan_workflow" {
 
   depends_on = [
     aws_iam_role.step_functions_role,
-    aws_lambda_function.trigger_pipeline,
     aws_lambda_function.initialize_state,
     aws_lambda_function.orchestrator,
     aws_lambda_function.detect_skew,
