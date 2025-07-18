@@ -20,6 +20,9 @@ resource "aws_ecr_repository" "sagemaker_realesrgan" {
 resource "aws_ecr_repository_policy" "sagemaker_realesrgan_policy" {
   repository = aws_ecr_repository.sagemaker_realesrgan.name
 
+  # IAM 역할 생성 후에 정책 적용
+  depends_on = [aws_iam_role.sagemaker_role]
+
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
@@ -32,6 +35,18 @@ resource "aws_ecr_repository_policy" "sagemaker_realesrgan_policy" {
         Action = [
           "ecr:BatchCheckLayerAvailability",
           "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage"
+        ]
+      },
+      {
+        Sid    = "AllowSageMakerServiceAccess", 
+        Effect = "Allow",
+        Principal = {
+          Service = "sagemaker.amazonaws.com"
+        },
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer", 
           "ecr:BatchGetImage"
         ]
       }

@@ -175,22 +175,21 @@ resource "aws_iam_policy" "sagemaker_ecr_policy" {
       {
         Effect = "Allow",
         Action = [
+          "ecr:GetAuthorizationToken"
+        ],
+        Resource = "*"
+      },
+      {
+        Effect = "Allow",
+        Action = [
           "ecr:BatchCheckLayerAvailability",
           "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage",
-          "ecr:GetAuthorizationToken"
+          "ecr:BatchGetImage"
         ],
         Resource = [
           aws_ecr_repository.sagemaker_realesrgan.arn,
           "arn:aws:ecr:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:repository/${var.project_name}/*"
         ]
-      },
-      {
-        Effect = "Allow",
-        Action = [
-          "ecr:GetAuthorizationToken"
-        ],
-        Resource = "*"
       }
     ]
   })

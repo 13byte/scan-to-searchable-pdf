@@ -20,7 +20,8 @@ resource "aws_sagemaker_model" "realesrgan" {
   depends_on = [
     null_resource.docker_images,
     data.aws_ecr_image.sagemaker_image,
-    aws_iam_role.sagemaker_role
+    aws_iam_role.sagemaker_role,
+    aws_ecr_repository_policy.sagemaker_realesrgan_policy
   ]
 }
 
