@@ -19,38 +19,15 @@ fi
 
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-# --- Docker 이미지 빌드 및 푸시 함수 ---
-build_and_push() {
-  local dockerfile_path=$1
-  local ecr_repo_uri=$2
-  local context_path=$3
-  local platform_arg=$4
-  # Terraform과 일치하도록 latest 태그 고정 사용
-  local image_tag="latest"
-
-  log_info "Building and pushing image to '${ecr_repo_uri}:${image_tag}'..."
-  aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com" >&2
-  
-  # Lambda 매니페스트 호환성을 위한 레거시 빌더 사용
-  DOCKER_BUILDKIT=0 docker build \
-    ${platform_arg} \
-    -t "${ecr_repo_uri}:${image_tag}" \
-    -f "${dockerfile_path}" \
-    "${context_path}" >&2
-    
-  docker push "${ecr_repo_uri}:${image_tag}" >&2
-    
-  log_success "Image push complete: ${ecr_repo_uri}:${image_tag}"
-  echo "$image_tag"
-}
-
 # --- 명령어 처리 ---
 case "$COMMAND" in
 deploy)
-  log_info "Starting infrastructure deployment..."
+  log_info "Starting simplified infrastructure deployment..."
 
-  log_info "Initializing Terraform and creating ECR repositories first..."
+  log_info "Initializing Terraform..."
   (cd infra && terraform init)
+  
+  log_info "Creating ECR repositories first..."
   (cd infra && terraform apply -auto-approve \
     -target=aws_ecr_repository.fargate_processor \
     -target=aws_ecr_repository.sagemaker_realesrgan \
@@ -59,32 +36,15 @@ deploy)
     -target=aws_ecr_repository.pdf_generator_lambda \
     -target=aws_ecr_repository.orchestrator_lambda)
 
-  log_info "Building and pushing Docker images..."
-  FARGATE_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/skew-corrector"
-  DETECT_SKEW_LAMBDA_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/detect-skew"
-  PROCESS_OCR_LAMBDA_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/process-ocr"
-  PDF_GENERATOR_LAMBDA_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/pdf-generator"
-  ORCHESTRATOR_LAMBDA_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/orchestrator"
-  SAGEMAKER_ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}/sagemaker-realesrgan"
-
-  FARGATE_IMAGE_TAG=$(build_and_push "workers/2_image_processing/skew_corrector/Dockerfile" "$FARGATE_ECR_REPO" "." "--platform linux/arm64")
-  DETECT_SKEW_LAMBDA_IMAGE_TAG=$(build_and_push "docker/detect-skew/Dockerfile" "$DETECT_SKEW_LAMBDA_ECR_REPO" "." "--platform linux/arm64")
-  PROCESS_OCR_LAMBDA_IMAGE_TAG=$(build_and_push "docker/process-ocr/Dockerfile" "$PROCESS_OCR_LAMBDA_ECR_REPO" "." "--platform linux/arm64")
-  PDF_GENERATOR_LAMBDA_IMAGE_TAG=$(build_and_push "docker/pdf-generator/Dockerfile" "$PDF_GENERATOR_LAMBDA_ECR_REPO" "." "--platform linux/arm64")
-  ORCHESTRATOR_LAMBDA_IMAGE_TAG=$(build_and_push "docker/orchestrator/Dockerfile" "$ORCHESTRATOR_LAMBDA_ECR_REPO" "." "--platform linux/arm64")
-  SAGEMAKER_IMAGE_TAG=$(build_and_push "sagemaker/Dockerfile" "$SAGEMAKER_ECR_REPO" "." "--platform linux/amd64")
+  log_info "Building and pushing Docker images (managed by Terraform)..."
+  (cd infra && terraform apply -auto-approve \
+    -target=null_resource.docker_images)
 
   log_info "Deploying the rest of the AWS resources..."
-  (cd infra && terraform apply -auto-approve \
-    -var="fargate_image_tag=${FARGATE_IMAGE_TAG}" \
-    -var="detect_skew_lambda_image_tag=${DETECT_SKEW_LAMBDA_IMAGE_TAG}" \
-    -var="process_ocr_lambda_image_tag=${PROCESS_OCR_LAMBDA_IMAGE_TAG}" \
-    -var="pdf_generator_lambda_image_tag=${PDF_GENERATOR_LAMBDA_IMAGE_TAG}" \
-    -var="orchestrator_lambda_image_tag=${ORCHESTRATOR_LAMBDA_IMAGE_TAG}" \
-    -var="sagemaker_image_tag=${SAGEMAKER_IMAGE_TAG}")
+  (cd infra && terraform apply -auto-approve)
 
-  log_success "Infrastructure deployment completed successfully."
-  log_info "Please check 'config/.env' and update the Google API key in AWS Secrets Manager if needed."
+  log_success "Infrastructure deployment completed successfully!"
+  log_info "Check DynamoDB and Lambda functions in AWS Console."
   ;;
 start)
   log_info "Starting the image processing pipeline..."

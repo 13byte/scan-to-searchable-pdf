@@ -3,8 +3,13 @@ resource "aws_sagemaker_model" "realesrgan" {
   execution_role_arn = aws_iam_role.sagemaker_role.arn
 
   primary_container {
-    image = "${aws_ecr_repository.sagemaker_realesrgan.repository_url}:${var.sagemaker_image_tag}"
+    image = "${aws_ecr_repository.sagemaker_realesrgan.repository_url}:latest"
   }
+
+  depends_on = [
+    null_resource.docker_images,
+    data.aws_ecr_image.sagemaker_image
+  ]
 }
 
 resource "aws_sagemaker_endpoint_configuration" "realesrgan" {
@@ -20,9 +25,13 @@ resource "aws_sagemaker_endpoint_configuration" "realesrgan" {
       memory_size_in_mb = 4096 # Real-ESRGAN 모델에 적합한 메모리
     }
   }
+
+  depends_on = [aws_sagemaker_model.realesrgan]
 }
 
 resource "aws_sagemaker_endpoint" "realesrgan" {
   name                 = "${var.project_name}-realesrgan-endpoint"
   endpoint_config_name = aws_sagemaker_endpoint_configuration.realesrgan.name
+
+  depends_on = [aws_sagemaker_endpoint_configuration.realesrgan]
 }

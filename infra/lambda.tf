@@ -54,7 +54,7 @@ resource "aws_lambda_function" "orchestrator" {
   function_name    = "${var.project_name}-orchestrator"
   role             = aws_iam_role.lambda_fargate_base_role.arn
   package_type     = "Image"
-  image_uri        = "${aws_ecr_repository.orchestrator_lambda.repository_url}:${var.orchestrator_lambda_image_tag}"
+  image_uri        = "${aws_ecr_repository.orchestrator_lambda.repository_url}:latest"
   architectures    = ["arm64"]
   timeout          = 60
   memory_size      = 256
@@ -67,7 +67,11 @@ resource "aws_lambda_function" "orchestrator" {
       POWERTOOLS_METRICS_NAMESPACE  = "BookScan/Processing"
     }
   }
-  depends_on = [aws_cloudwatch_log_group.lambda_logs["orchestrator"]]
+  depends_on = [
+    aws_cloudwatch_log_group.lambda_logs["orchestrator"],
+    null_resource.docker_images,
+    data.aws_ecr_image.orchestrator_image
+  ]
 }
 
 resource "aws_lambda_function" "upscaler" {
@@ -109,7 +113,7 @@ resource "aws_lambda_function" "pdf_generator" {
   function_name    = "${var.project_name}-pdf-generator"
   role             = aws_iam_role.lambda_fargate_base_role.arn
   package_type     = "Image"
-  image_uri        = "${aws_ecr_repository.pdf_generator_lambda.repository_url}:${var.pdf_generator_lambda_image_tag}"
+  image_uri        = "${aws_ecr_repository.pdf_generator_lambda.repository_url}:latest"
   architectures    = ["arm64"]
   timeout          = 300
   memory_size      = 1536
@@ -133,7 +137,11 @@ resource "aws_lambda_function" "pdf_generator" {
     target_arn = aws_sqs_queue.dlq.arn
   }
 
-  depends_on = [aws_cloudwatch_log_group.lambda_logs["pdf_generator"]]
+  depends_on = [
+    aws_cloudwatch_log_group.lambda_logs["pdf_generator"],
+    null_resource.docker_images,
+    data.aws_ecr_image.pdf_generator_image
+  ]
 }
 
 resource "aws_lambda_function" "summary_generator" {
@@ -160,7 +168,7 @@ resource "aws_lambda_function" "detect_skew" {
   function_name                  = "${var.project_name}-detect-skew"
   role                           = aws_iam_role.lambda_fargate_base_role.arn
   package_type                   = "Image"
-  image_uri                      = "${aws_ecr_repository.detect_skew_lambda.repository_url}:${var.detect_skew_lambda_image_tag}"
+  image_uri                      = "${aws_ecr_repository.detect_skew_lambda.repository_url}:latest"
   architectures                  = ["arm64"]
   timeout                        = 30
   memory_size                    = 512
@@ -184,8 +192,10 @@ resource "aws_lambda_function" "detect_skew" {
     target_arn = aws_sqs_queue.dlq.arn
   }
 
-  depends_on = [aws_cloudwatch_log_group.lambda_logs["detect_skew"],
-    aws_sagemaker_endpoint.realesrgan # 명시적 의존성 추가
+  depends_on = [
+    aws_cloudwatch_log_group.lambda_logs["detect_skew"],
+    null_resource.docker_images,
+    data.aws_ecr_image.detect_skew_image
   ]
 }
 
@@ -193,7 +203,7 @@ resource "aws_lambda_function" "process_ocr" {
   function_name                  = "${var.project_name}-process-ocr"
   role                           = aws_iam_role.lambda_fargate_base_role.arn
   package_type                   = "Image"
-  image_uri                      = "${aws_ecr_repository.process_ocr_lambda.repository_url}:${var.process_ocr_lambda_image_tag}"
+  image_uri                      = "${aws_ecr_repository.process_ocr_lambda.repository_url}:latest"
   architectures                  = ["arm64"]
   timeout                        = 60
   memory_size                    = 1024
@@ -217,7 +227,9 @@ resource "aws_lambda_function" "process_ocr" {
     target_arn = aws_sqs_queue.dlq.arn
   }
 
-  depends_on = [aws_cloudwatch_log_group.lambda_logs["process_ocr"],
-    aws_sagemaker_endpoint.realesrgan # 명시적 의존성 추가
+  depends_on = [
+    aws_cloudwatch_log_group.lambda_logs["process_ocr"],
+    null_resource.docker_images,
+    data.aws_ecr_image.process_ocr_image
   ]
 }

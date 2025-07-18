@@ -35,8 +35,8 @@ resource "aws_ecs_task_definition" "skew_corrector" {
 
   container_definitions = jsonencode([
     {
-      name      = "skew-corrector"
-      image     = "${aws_ecr_repository.fargate_processor.repository_url}:${var.fargate_image_tag}"
+      name      = "consolidated-processor"  # Step Functions에서 참조하는 이름과 일치
+      image     = "${aws_ecr_repository.fargate_processor.repository_url}:latest"
       essential = true
       logConfiguration = {
         logDriver = "awslogs"
@@ -48,6 +48,11 @@ resource "aws_ecs_task_definition" "skew_corrector" {
       }
     }
   ])
+
+  depends_on = [
+    null_resource.docker_images,
+    data.aws_ecr_image.fargate_image
+  ]
 }
 
 resource "aws_cloudwatch_log_group" "fargate_logs" {
