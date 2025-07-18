@@ -199,8 +199,7 @@ resource "aws_iam_policy" "step_functions_policy" {
           aws_lambda_function.process_ocr.arn,
           aws_lambda_function.upscaler.arn,
           aws_lambda_function.pdf_generator.arn,
-          aws_lambda_function.summary_generator.arn,
-          aws_lambda_function.trigger_pipeline.arn
+          aws_lambda_function.summary_generator.arn
         ]
       },
       {
