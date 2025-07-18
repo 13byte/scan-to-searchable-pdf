@@ -16,6 +16,29 @@ resource "aws_ecr_repository" "sagemaker_realesrgan" {
   tags = { Project = var.project_name }
 }
 
+# SageMaker가 ECR 이미지에 접근할 수 있도록 리포지토리 정책 설정
+resource "aws_ecr_repository_policy" "sagemaker_realesrgan_policy" {
+  repository = aws_ecr_repository.sagemaker_realesrgan.name
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid    = "AllowSageMakerAccess",
+        Effect = "Allow",
+        Principal = {
+          AWS = aws_iam_role.sagemaker_role.arn
+        },
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage"
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_ecr_repository" "detect_skew_lambda" {
   name                 = "${var.project_name}/detect-skew"
   image_tag_mutability = "MUTABLE"

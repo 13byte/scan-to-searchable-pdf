@@ -164,6 +164,43 @@ resource "aws_iam_role_policy_attachment" "sagemaker_attach_ecr" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
+# SageMaker가 특정 ECR 리포지토리에 접근할 수 있는 추가 권한
+resource "aws_iam_policy" "sagemaker_ecr_policy" {
+  name        = "${var.project_name}-sagemaker-ecr-policy"
+  description = "SageMaker가 프로젝트별 ECR 리포지토리에 접근하기 위한 정책"
+  
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:GetAuthorizationToken"
+        ],
+        Resource = [
+          aws_ecr_repository.sagemaker_realesrgan.arn,
+          "arn:aws:ecr:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:repository/${var.project_name}/*"
+        ]
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "ecr:GetAuthorizationToken"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "sagemaker_attach_ecr_custom" {
+  role       = aws_iam_role.sagemaker_role.name
+  policy_arn = aws_iam_policy.sagemaker_ecr_policy.arn
+}
+
 resource "aws_iam_role" "step_functions_role" {
   name = "${var.project_name}-step-functions-role"
   assume_role_policy = jsonencode({
