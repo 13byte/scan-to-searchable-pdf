@@ -12,7 +12,6 @@ resource "aws_sagemaker_model" "realesrgan" {
     }
   }
 
-  # 타임아웃 설정
   tags = {
     Name    = "${var.project_name}-realesrgan-model"
     Project = var.project_name
@@ -23,13 +22,6 @@ resource "aws_sagemaker_model" "realesrgan" {
     data.aws_ecr_image.sagemaker_image,
     aws_iam_role.sagemaker_role
   ]
-  
-  # 생성 타임아웃 조정
-  timeouts {
-    create = "15m"
-    update = "15m"
-    delete = "15m"
-  }
 }
 
 resource "aws_sagemaker_endpoint_configuration" "realesrgan" {
@@ -52,13 +44,6 @@ resource "aws_sagemaker_endpoint_configuration" "realesrgan" {
   }
 
   depends_on = [aws_sagemaker_model.realesrgan]
-  
-  # 생성 타임아웃 조정
-  timeouts {
-    create = "10m"
-    update = "10m"
-    delete = "10m"
-  }
 }
 
 resource "aws_sagemaker_endpoint" "realesrgan" {
@@ -71,11 +56,4 @@ resource "aws_sagemaker_endpoint" "realesrgan" {
   }
 
   depends_on = [aws_sagemaker_endpoint_configuration.realesrgan]
-  
-  # 생성 타임아웃 조정 - 서버리스 엔드포인트는 시간이 더 걸림
-  timeouts {
-    create = "20m"
-    update = "20m"
-    delete = "20m"
-  }
 }
