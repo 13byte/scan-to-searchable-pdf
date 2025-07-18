@@ -68,8 +68,6 @@ resource "null_resource" "docker_images" {
       echo "⚡ [병렬] detect-skew Lambda 빌드 중..."
       (
         docker buildx build --platform linux/arm64 \
-          --cache-from ${aws_ecr_repository.detect_skew_lambda.repository_url}:cache \
-          --cache-to ${aws_ecr_repository.detect_skew_lambda.repository_url}:cache,mode=max \
           -t ${aws_ecr_repository.detect_skew_lambda.repository_url}:latest \
           -f docker/detect-skew/Dockerfile . && \
         docker push ${aws_ecr_repository.detect_skew_lambda.repository_url}:latest
@@ -80,8 +78,6 @@ resource "null_resource" "docker_images" {
       echo "⚡ [병렬] process-ocr Lambda 빌드 중..."
       (
         docker buildx build --platform linux/arm64 \
-          --cache-from ${aws_ecr_repository.process_ocr_lambda.repository_url}:cache \
-          --cache-to ${aws_ecr_repository.process_ocr_lambda.repository_url}:cache,mode=max \
           -t ${aws_ecr_repository.process_ocr_lambda.repository_url}:latest \
           -f docker/process-ocr/Dockerfile . && \
         docker push ${aws_ecr_repository.process_ocr_lambda.repository_url}:latest
@@ -92,8 +88,6 @@ resource "null_resource" "docker_images" {
       echo "⚡ [병렬] orchestrator Lambda 빌드 중..."
       (
         docker buildx build --platform linux/arm64 \
-          --cache-from ${aws_ecr_repository.orchestrator_lambda.repository_url}:cache \
-          --cache-to ${aws_ecr_repository.orchestrator_lambda.repository_url}:cache,mode=max \
           -t ${aws_ecr_repository.orchestrator_lambda.repository_url}:latest \
           -f docker/orchestrator/Dockerfile . && \
         docker push ${aws_ecr_repository.orchestrator_lambda.repository_url}:latest
@@ -104,8 +98,6 @@ resource "null_resource" "docker_images" {
       echo "⚡ [병렬] PDF generator Lambda 빌드 중..."
       (
         docker buildx build --platform linux/arm64 \
-          --cache-from ${aws_ecr_repository.pdf_generator_lambda.repository_url}:cache \
-          --cache-to ${aws_ecr_repository.pdf_generator_lambda.repository_url}:cache,mode=max \
           -t ${aws_ecr_repository.pdf_generator_lambda.repository_url}:latest \
           -f docker/pdf-generator/Dockerfile . && \
         docker push ${aws_ecr_repository.pdf_generator_lambda.repository_url}:latest
@@ -117,8 +109,6 @@ resource "null_resource" "docker_images" {
       echo "⚡ [병렬] Fargate processor 빌드 중..."
       (
         docker buildx build --platform linux/arm64 \
-          --cache-from ${aws_ecr_repository.fargate_processor.repository_url}:cache \
-          --cache-to ${aws_ecr_repository.fargate_processor.repository_url}:cache,mode=max \
           -t ${aws_ecr_repository.fargate_processor.repository_url}:latest \
           -f workers/2_image_processing/skew_corrector/Dockerfile . && \
         docker push ${aws_ecr_repository.fargate_processor.repository_url}:latest
@@ -126,12 +116,12 @@ resource "null_resource" "docker_images" {
       ) &
       build_pids+=($!)
       
-      # SageMaker 빌드 (AMD64)
+      # SageMaker 빌드 (AMD64) - Docker V2 형식 강제
       echo "⚡ [별도] SageMaker Real-ESRGAN 빌드 중..."
       (
         docker buildx build --platform linux/amd64 \
-          --cache-from ${aws_ecr_repository.sagemaker_realesrgan.repository_url}:cache \
-          --cache-to ${aws_ecr_repository.sagemaker_realesrgan.repository_url}:cache,mode=max \
+          --provenance=false \
+          --output type=docker \
           -t ${aws_ecr_repository.sagemaker_realesrgan.repository_url}:latest \
           -f sagemaker/Dockerfile . && \
         docker push ${aws_ecr_repository.sagemaker_realesrgan.repository_url}:latest

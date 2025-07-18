@@ -54,14 +54,18 @@ deploy)
   (cd infra && terraform apply -auto-approve \
     -target=null_resource.docker_images)
 
-  log_info "🏗️ 메인 AWS 리소스 배포 중 (SageMaker 제외)..."
+  log_info "🏗️ 메인 AWS 리소스 배포 중..."
   (cd infra && terraform apply -auto-approve \
     $(terraform state list | grep -v 'aws_sagemaker' | sed 's/^/-target=/' | tr '\n' ' '))
 
-  log_success "🎉 메인 인프라 배포 완료! (SageMaker 별도 배포 필요)"
-  log_info "📊 확인: DynamoDB 및 Lambda 함수가 AWS 콘솔에서 활성화됨"
-  log_warn "⚠️  SageMaker 배포는 다음 명령어로 별도 실행:"
-  log_info "    ./scripts/sagemaker-deploy.sh deploy-sagemaker"
+  log_info "🤖 SageMaker Real-ESRGAN 모델 배포 중... (15분 소요 예상)"
+  (cd infra && terraform apply -auto-approve \
+    -target=aws_sagemaker_model.realesrgan \
+    -target=aws_sagemaker_endpoint_configuration.realesrgan \
+    -target=aws_sagemaker_endpoint.realesrgan)
+
+  log_success "🎉 전체 인프라 배포 완료! (SageMaker 포함)"
+  log_info "📊 확인: DynamoDB, Lambda 함수, SageMaker 엔드포인트가 AWS 콘솔에서 활성화됨"
   ;;
 start)
   log_info "Starting the image processing pipeline..."
