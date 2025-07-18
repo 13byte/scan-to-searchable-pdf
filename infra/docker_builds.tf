@@ -64,13 +64,15 @@ resource "null_resource" "docker_images" {
       # 병렬 빌드를 위한 백그라운드 프로세스 배열
       declare -a build_pids=()
       
-      # Lambda 함수들 병렬 빌드 (ARM64)
+      # Lambda 함수들 병렬 빌드 (ARM64) - AWS Support 권장사항 적용
       echo "⚡ [병렬] detect-skew Lambda 빌드 중..."
       (
         docker buildx build --platform linux/arm64 \
-          --push \
+          --provenance=false \
+          --output type=docker \
           -t ${aws_ecr_repository.detect_skew_lambda.repository_url}:latest \
-          -f docker/detect-skew/Dockerfile .
+          -f docker/detect-skew/Dockerfile . && \
+        docker push ${aws_ecr_repository.detect_skew_lambda.repository_url}:latest
         echo "✅ detect-skew 완료"
       ) &
       build_pids+=($!)
@@ -78,9 +80,11 @@ resource "null_resource" "docker_images" {
       echo "⚡ [병렬] process-ocr Lambda 빌드 중..."
       (
         docker buildx build --platform linux/arm64 \
-          --push \
+          --provenance=false \
+          --output type=docker \
           -t ${aws_ecr_repository.process_ocr_lambda.repository_url}:latest \
-          -f docker/process-ocr/Dockerfile .
+          -f docker/process-ocr/Dockerfile . && \
+        docker push ${aws_ecr_repository.process_ocr_lambda.repository_url}:latest
         echo "✅ process-ocr 완료"
       ) &
       build_pids+=($!)
@@ -88,9 +92,11 @@ resource "null_resource" "docker_images" {
       echo "⚡ [병렬] orchestrator Lambda 빌드 중..."
       (
         docker buildx build --platform linux/arm64 \
-          --push \
+          --provenance=false \
+          --output type=docker \
           -t ${aws_ecr_repository.orchestrator_lambda.repository_url}:latest \
-          -f docker/orchestrator/Dockerfile .
+          -f docker/orchestrator/Dockerfile . && \
+        docker push ${aws_ecr_repository.orchestrator_lambda.repository_url}:latest
         echo "✅ orchestrator 완료"
       ) &
       build_pids+=($!)
@@ -98,20 +104,24 @@ resource "null_resource" "docker_images" {
       echo "⚡ [병렬] PDF generator Lambda 빌드 중..."
       (
         docker buildx build --platform linux/arm64 \
-          --push \
+          --provenance=false \
+          --output type=docker \
           -t ${aws_ecr_repository.pdf_generator_lambda.repository_url}:latest \
-          -f docker/pdf-generator/Dockerfile .
+          -f docker/pdf-generator/Dockerfile . && \
+        docker push ${aws_ecr_repository.pdf_generator_lambda.repository_url}:latest
         echo "✅ PDF generator 완료"
       ) &
       build_pids+=($!)
       
-      # Fargate 프로세서 빌드 (별도 ARM64)
+      # Fargate 프로세서 빌드 (ARM64) - AWS Support 권장사항 적용
       echo "⚡ [병렬] Fargate processor 빌드 중..."
       (
         docker buildx build --platform linux/arm64 \
-          --push \
+          --provenance=false \
+          --output type=docker \
           -t ${aws_ecr_repository.fargate_processor.repository_url}:latest \
-          -f workers/2_image_processing/skew_corrector/Dockerfile .
+          -f workers/2_image_processing/skew_corrector/Dockerfile . && \
+        docker push ${aws_ecr_repository.fargate_processor.repository_url}:latest
         echo "✅ Fargate processor 완료"
       ) &
       build_pids+=($!)
