@@ -31,9 +31,9 @@ RUN uv venv /opt/venv && \
 
 # 모델 다운로드 (빌드 시점에 실행)
 COPY sagemaker/download_model.py .
-RUN . /opt/venv/bin/activate && \
-    python download_model.py && \
-    mv models /opt/ml/model
+RUN mkdir -p /opt/ml/model && \
+    . /opt/venv/bin/activate && \
+    python download_model.py
 
 # Production stage - 최종 경량 이미지
 FROM python:3.12-slim
