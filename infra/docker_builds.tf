@@ -116,25 +116,17 @@ resource "null_resource" "docker_images" {
       ) &
       build_pids+=($!)
       
-      # SageMaker 빌드 (AMD64) - Docker v2 형식 강제
+      # SageMaker 빌드 (AMD64) - AWS Support 공식 해결책 적용
       echo "⚡ [별도] SageMaker Real-ESRGAN 빌드 중..."
       (
-        # Docker container driver 설정 (OCI 대신 Docker v2 형식 생성)
-        if ! docker buildx inspect sagemaker-builder >/dev/null 2>&1; then
-          echo "🔧 SageMaker용 Docker container driver 생성 중..."
-          docker buildx create --name sagemaker-builder --driver docker-container --use
-        else
-          docker buildx use sagemaker-builder
-        fi
-        
-        # Docker v2 형식으로 빌드 및 로컬 저장
+        # AWS Support 권장: --provenance=false + --output type=docker
         docker buildx build --platform linux/amd64 \
+          --provenance=false \
           --output type=docker \
-          --load \
           -t ${aws_ecr_repository.sagemaker_realesrgan.repository_url}:latest \
-          -f sagemaker/Dockerfile .
+          -f sagemaker/Dockerfile . && \
         
-        # ECR에 푸시 (이미 Docker v2 형식)
+        # ECR에 푸시 (Docker v2 형식으로 빌드됨)
         docker push ${aws_ecr_repository.sagemaker_realesrgan.repository_url}:latest
         
         echo "✅ SageMaker Real-ESRGAN 완료 (Docker v2 형식)"
