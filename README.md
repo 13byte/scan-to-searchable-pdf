@@ -125,6 +125,19 @@ AWS Step Functions 콘솔에서 실행:
 3. **Google API 오류**: 서비스 계정 키 및 Vision API 활성화 확인
 4. **처리 지연**: CloudWatch 메트릭 확인 및 배치 크기 자동 조정
 5. **테스트 실패**: `./run.sh test` 실행 후 오류 로그 확인
+6. **SageMaker OCI Manifest 오류**: `./scripts/fix-sagemaker-manifest.sh` 실행
+
+### SageMaker 호환성 문제 해결
+
+Docker Desktop 최신 버전에서 SageMaker 배포 시 발생하는 OCI manifest 오류:
+
+```bash
+# 자동 해결 스크립트 실행
+./scripts/fix-sagemaker-manifest.sh
+
+# 또는 수동 해결 (Docker Desktop containerd 비활성화)
+# Settings → Features in development → "Use containerd" 체크 해제
+```
 
 ## 리소스 삭제
 

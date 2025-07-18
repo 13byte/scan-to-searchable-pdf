@@ -116,15 +116,39 @@ resource "null_resource" "docker_images" {
       ) &
       build_pids+=($!)
       
-      # SageMaker 빌드 (AMD64) - Docker V2 형식 강제
+      # SageMaker 빌드 (AMD64) - skopeo로 Docker V2 형식 보장
       echo "⚡ [별도] SageMaker Real-ESRGAN 빌드 중..."
       (
-        docker buildx build --platform linux/amd64 \
-          --provenance=false \
-          --push \
-          -t ${aws_ecr_repository.sagemaker_realesrgan.repository_url}:latest \
+        # 1단계: 일반 Docker 빌드 (OCI 형식)
+        docker build --platform linux/amd64 \
+          --no-cache \
+          -t sagemaker-realesrgan-temp:latest \
           -f sagemaker/Dockerfile .
-        echo "✅ SageMaker Real-ESRGAN 완료"
+        
+        # 2단계: skopeo 설치 확인
+        if ! command -v skopeo &> /dev/null; then
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            echo "🔧 skopeo 설치 중..."
+            brew install skopeo
+          else
+            echo "❌ skopeo가 필요합니다. 수동 설치 후 재실행하세요."
+            exit 1
+          fi
+        fi
+        
+        # 3단계: ECR 로그인 (skopeo용)
+        aws ecr get-login-password --region ${data.aws_region.current.name} | \
+          skopeo login --username AWS --password-stdin ${aws_ecr_repository.sagemaker_realesrgan.repository_url}
+        
+        # 4단계: skopeo로 Docker v2s2 형식 변환 후 푸시
+        skopeo copy --format v2s2 \
+          docker-daemon:sagemaker-realesrgan-temp:latest \
+          docker://${aws_ecr_repository.sagemaker_realesrgan.repository_url}:latest
+        
+        # 5단계: 임시 이미지 정리
+        docker rmi sagemaker-realesrgan-temp:latest || true
+        
+        echo "✅ SageMaker Real-ESRGAN 완료 (Docker v2 형식)"
       ) &
       build_pids+=($!)
       
