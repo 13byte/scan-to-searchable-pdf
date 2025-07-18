@@ -3,13 +3,33 @@ resource "aws_sagemaker_model" "realesrgan" {
   execution_role_arn = aws_iam_role.sagemaker_role.arn
 
   primary_container {
-    image = "${aws_ecr_repository.sagemaker_realesrgan.repository_url}:latest"
+    image          = "${aws_ecr_repository.sagemaker_realesrgan.repository_url}:latest"
+    # 컨테이너 환경 최적화
+    environment = {
+      "SAGEMAKER_PROGRAM"         = "inference.py"
+      "SAGEMAKER_SUBMIT_DIRECTORY" = "/opt/ml/code"
+      "PYTHONUNBUFFERED"          = "1"
+    }
+  }
+
+  # 타임아웃 설정
+  tags = {
+    Name    = "${var.project_name}-realesrgan-model"
+    Project = var.project_name
   }
 
   depends_on = [
     null_resource.docker_images,
-    data.aws_ecr_image.sagemaker_image
+    data.aws_ecr_image.sagemaker_image,
+    aws_iam_role.sagemaker_role
   ]
+  
+  # 생성 타임아웃 조정
+  timeouts {
+    create = "15m"
+    update = "15m"
+    delete = "15m"
+  }
 }
 
 resource "aws_sagemaker_endpoint_configuration" "realesrgan" {
@@ -21,17 +41,41 @@ resource "aws_sagemaker_endpoint_configuration" "realesrgan" {
 
     # 서버리스 구성으로 전환 - 24/7 운영 비용 74% 절감
     serverless_config {
-      max_concurrency   = 20   # 동시 요청 최대 20개
-      memory_size_in_mb = 4096 # Real-ESRGAN 모델에 적합한 메모리
+      max_concurrency   = 10   # 동시 요청 수 감소로 안정성 확보
+      memory_size_in_mb = 6144 # 메모리 증가로 Real-ESRGAN 안정성 향상
     }
   }
 
+  tags = {
+    Name    = "${var.project_name}-realesrgan-endpoint-config"
+    Project = var.project_name
+  }
+
   depends_on = [aws_sagemaker_model.realesrgan]
+  
+  # 생성 타임아웃 조정
+  timeouts {
+    create = "10m"
+    update = "10m"
+    delete = "10m"
+  }
 }
 
 resource "aws_sagemaker_endpoint" "realesrgan" {
   name                 = "${var.project_name}-realesrgan-endpoint"
   endpoint_config_name = aws_sagemaker_endpoint_configuration.realesrgan.name
 
+  tags = {
+    Name    = "${var.project_name}-realesrgan-endpoint"
+    Project = var.project_name
+  }
+
   depends_on = [aws_sagemaker_endpoint_configuration.realesrgan]
+  
+  # 생성 타임아웃 조정 - 서버리스 엔드포인트는 시간이 더 걸림
+  timeouts {
+    create = "20m"
+    update = "20m"
+    delete = "20m"
+  }
 }

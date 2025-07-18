@@ -104,8 +104,9 @@ resource "aws_lambda_function" "upscaler" {
     target_arn = aws_sqs_queue.dlq.arn
   }
 
-  depends_on = [aws_cloudwatch_log_group.lambda_logs["upscaler"],
-    aws_sagemaker_endpoint.realesrgan # 명시적 의존성 추가
+  depends_on = [
+    aws_cloudwatch_log_group.lambda_logs["upscaler"]
+    # SageMaker 의존성 제거 - 런타임에 엔드포인트 존재 확인
   ]
 }
 
