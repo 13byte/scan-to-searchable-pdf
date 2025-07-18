@@ -1,0 +1,90 @@
+# Git 관련
+.git
+.gitignore
+.gitattributes
+
+# Python 관련
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git
+.mypy_cache
+.pytest_cache
+.hypothesis
+
+# Virtual environments
+.venv
+venv/
+ENV/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 빌드 결과물
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Terraform
+infra/.terraform/
+infra/terraform.tfstate*
+infra/.terraform.lock.hcl
+
+# Docker
+.dockerignore
+Dockerfile*
+
+# 테스트 및 문서
+tests/
+docs/
+README.md
+*.md
+
+# 로그
+*.log
+logs/
+
+# 임시 파일
+tmp/
+temp/
+.tmp
+
+# AWS 관련
+.aws/
+
+# 프로젝트별 제외
+scan_images/
+nuke-config.template.yml
+
+# 설정 파일 (민감한 정보 포함 가능)
+config/.env
+config/google-service-account.json

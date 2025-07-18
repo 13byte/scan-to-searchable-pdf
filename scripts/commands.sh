@@ -22,12 +22,26 @@ AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 # --- 명령어 처리 ---
 case "$COMMAND" in
 deploy)
-  log_info "Starting simplified infrastructure deployment..."
+  log_info "🚀 Starting optimized infrastructure deployment..."
 
-  log_info "Initializing Terraform..."
+  # Docker Buildx 초기화 및 최적화
+  log_info "⚡ Docker BuildKit 최적화 설정 중..."
+  export DOCKER_BUILDKIT=1
+  export BUILDKIT_PROGRESS=plain
+  
+  # Docker buildx 빌더 확인/생성
+  if ! docker buildx inspect multiarch-builder >/dev/null 2>&1; then
+    log_info "📦 다중 아키텍처 빌더 생성 중..."
+    docker buildx create --name multiarch-builder --driver docker-container --use || true
+    docker buildx inspect multiarch-builder --bootstrap
+  else
+    docker buildx use multiarch-builder
+  fi
+
+  log_info "🔧 Terraform 초기화 중..."
   (cd infra && terraform init)
   
-  log_info "Creating ECR repositories first..."
+  log_info "📦 ECR 리포지토리 생성 중..."
   (cd infra && terraform apply -auto-approve \
     -target=aws_ecr_repository.fargate_processor \
     -target=aws_ecr_repository.sagemaker_realesrgan \
@@ -36,15 +50,15 @@ deploy)
     -target=aws_ecr_repository.pdf_generator_lambda \
     -target=aws_ecr_repository.orchestrator_lambda)
 
-  log_info "Building and pushing Docker images (managed by Terraform)..."
+  log_info "⚡ Docker 이미지 병렬 빌드 시작 (BuildKit + Multi-stage)..."
   (cd infra && terraform apply -auto-approve \
     -target=null_resource.docker_images)
 
-  log_info "Deploying the rest of the AWS resources..."
+  log_info "🏗️ 나머지 AWS 리소스 배포 중..."
   (cd infra && terraform apply -auto-approve)
 
-  log_success "Infrastructure deployment completed successfully!"
-  log_info "Check DynamoDB and Lambda functions in AWS Console."
+  log_success "🎉 인프라 배포 완료! 성능 최적화 적용됨"
+  log_info "📊 확인: DynamoDB 및 Lambda 함수가 AWS 콘솔에서 활성화됨"
   ;;
 start)
   log_info "Starting the image processing pipeline..."
