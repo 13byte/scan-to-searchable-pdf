@@ -54,6 +54,29 @@ resource "null_resource" "docker_images" {
       # BuildKit 활성화 및 최적화 설정
       export DOCKER_BUILDKIT=1
       export BUILDKIT_PROGRESS=plain
+
+      # 재시도 로직 함수 정의
+      retry_command() {
+        local cmd="$1"
+        local retries="$2"
+        local delay="$3"
+        local i=0
+        while true; do
+          if eval "$cmd"; then
+            return 0
+          else
+            local exit_code=$?
+            i=$((i + 1))
+            if [ $i -le $retries ]; then
+              echo "Command failed with exit code $exit_code. Retrying in $delay seconds... (Attempt $i/$retries)"
+              sleep "$delay"
+            else
+              echo "Command failed after $retries attempts."
+              return $exit_code
+            fi
+          fi
+        done
+      }
       
       # ECR 로그인
       aws ecr get-login-password --region ${local.region} | docker login --username AWS --password-stdin ${local.account_id}.dkr.ecr.${local.region}.amazonaws.com
@@ -75,8 +98,8 @@ resource "null_resource" "docker_images" {
           -t ${aws_ecr_repository.detect_skew_lambda.repository_url}:latest \
           -f docker/detect-skew/Dockerfile . || exit 3
         
-        echo "[PID:$$] detect-skew ECR 푸시 시작"  
-        docker push ${aws_ecr_repository.detect_skew_lambda.repository_url}:latest || exit 3
+        echo "[PID:$] detect-skew ECR 푸시 시작"  
+        retry_command "docker push ${aws_ecr_repository.detect_skew_lambda.repository_url}:latest" 5 10 || exit 3
         echo "✅ detect-skew 완료 (PID:$$)"
       ) &
       build_pids+=($!)
@@ -100,7 +123,7 @@ resource "null_resource" "docker_images" {
           --output type=docker \
           -t ${aws_ecr_repository.orchestrator_lambda.repository_url}:latest \
           -f docker/orchestrator/Dockerfile . && \
-        docker push ${aws_ecr_repository.orchestrator_lambda.repository_url}:latest
+        retry_command "docker push ${aws_ecr_repository.orchestrator_lambda.repository_url}:latest" 5 10
         echo "✅ orchestrator 완료"
       ) &
       build_pids+=($!)
@@ -112,7 +135,7 @@ resource "null_resource" "docker_images" {
           --output type=docker \
           -t ${aws_ecr_repository.pdf_generator_lambda.repository_url}:latest \
           -f docker/pdf-generator/Dockerfile . && \
-        docker push ${aws_ecr_repository.pdf_generator_lambda.repository_url}:latest
+        retry_command "docker push ${aws_ecr_repository.pdf_generator_lambda.repository_url}:latest" 5 10
         echo "✅ PDF generator 완료"
       ) &
       build_pids+=($!)
@@ -125,7 +148,7 @@ resource "null_resource" "docker_images" {
           --output type=docker \
           -t ${aws_ecr_repository.fargate_processor.repository_url}:latest \
           -f workers/2_image_processing/skew_corrector/Dockerfile . && \
-        docker push ${aws_ecr_repository.fargate_processor.repository_url}:latest
+        retry_command "docker push ${aws_ecr_repository.fargate_processor.repository_url}:latest" 5 10
         echo "✅ Fargate processor 완료"
       ) &
       build_pids+=($!)
@@ -141,7 +164,7 @@ resource "null_resource" "docker_images" {
           -f sagemaker/Dockerfile . && \
         
         # ECR에 푸시 (Docker v2 형식으로 빌드됨)
-        docker push ${aws_ecr_repository.sagemaker_realesrgan.repository_url}:latest
+        retry_command "docker push ${aws_ecr_repository.sagemaker_realesrgan.repository_url}:latest" 5 10
         
         echo "✅ SageMaker Real-ESRGAN 완료 (Docker v2 형식)"
       ) &
@@ -151,7 +174,7 @@ resource "null_resource" "docker_images" {
       echo "⏳ [대기] 병렬 빌드 완료 중..."
       
       failed_builds=0
-      for pid in "$${build_pids[@]}"; do
+      for pid in "${build_pids[@]}"; do
         if wait $pid; then
           echo "✅ [PID:$pid] 빌드 성공"
         else
