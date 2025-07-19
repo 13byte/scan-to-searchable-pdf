@@ -30,10 +30,10 @@ resource "null_resource" "docker_images" {
     pdf_gen_dockerfile      = filesha256("${path.module}/../docker/pdf-generator/Dockerfile")
     orchestrator_dockerfile = filesha256("${path.module}/../docker/orchestrator/Dockerfile")
     sagemaker_dockerfile    = filesha256("${path.module}/../sagemaker/Dockerfile")
-    
+
     # 빌드 스크립트 변경 감지
     build_script_hash = filesha256("${path.module}/../scripts/commands.sh")
-    
+
     # ECR 리포지토리 변경 감지
     ecr_repos = join(",", [
       aws_ecr_repository.fargate_processor.repository_url,
@@ -155,7 +155,7 @@ resource "null_resource" "docker_images" {
       echo "🎉 [성공] 모든 Docker 이미지 빌드 및 푸시 완료!"
       echo "📊 [성능] BuildKit + 병렬 처리로 대폭 속도 향상!"
     EOF
-    
+
     working_dir = path.module
   }
 }
@@ -191,8 +191,7 @@ data "aws_ecr_image" "orchestrator_image" {
   image_tag       = "latest"
 }
 
-data "aws_ecr_image" "sagemaker_image" {
-  depends_on      = [null_resource.docker_images]
-  repository_name = aws_ecr_repository.sagemaker_realesrgan.name
-  image_tag       = "latest"
-}
+
+
+
+

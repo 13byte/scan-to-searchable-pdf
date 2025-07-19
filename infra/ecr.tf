@@ -27,26 +27,14 @@ resource "aws_ecr_repository_policy" "sagemaker_realesrgan_policy" {
     Version = "2012-10-17",
     Statement = [
       {
-        Sid    = "AllowSageMakerAccess",
-        Effect = "Allow",
-        Principal = {
-          AWS = aws_iam_role.sagemaker_role.arn
-        },
-        Action = [
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage"
-        ]
-      },
-      {
-        Sid    = "AllowSageMakerServiceAccess", 
+        Sid    = "AllowSageMakerServiceAccess",
         Effect = "Allow",
         Principal = {
           Service = "sagemaker.amazonaws.com"
         },
         Action = [
           "ecr:BatchCheckLayerAvailability",
-          "ecr:GetDownloadUrlForLayer", 
+          "ecr:GetDownloadUrlForLayer",
           "ecr:BatchGetImage"
         ]
       }

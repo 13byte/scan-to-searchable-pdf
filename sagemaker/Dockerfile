@@ -1,18 +1,19 @@
 # syntax=docker/dockerfile:1
 # Multi-stage build for optimized SageMaker Real-ESRGAN container
-FROM python:3.12-slim AS base
+FROM public.ecr.aws/lambda/python:3.12 AS base
 
 # 시스템 환경 변수
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
 # 시스템 패키지 업데이트 및 필수 의존성 설치 (가장 안정적인 레이어)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    build-essential \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+RUN dnf update -y && dnf install -y \
+  git \
+  gcc \
+  make \
+  mesa-libGL \
+  glib2 \
+  && dnf clean all && rm -rf /var/cache/dnf /tmp/* /var/tmp/*
 
 # uv 설치 (빌드 도구)
 RUN pip install --no-cache-dir uv
@@ -26,17 +27,17 @@ COPY sagemaker/requirements.txt .
 
 # 최신 uv sync 사용으로 성능 최적화
 RUN uv venv /opt/venv && \
-    . /opt/venv/bin/activate && \
-    uv pip sync requirements.txt --no-cache
+  . /opt/venv/bin/activate && \
+  uv pip sync requirements.txt --no-cache
 
 # 모델 다운로드 (빌드 시점에 실행)
 COPY sagemaker/download_model.py .
 RUN mkdir -p /opt/ml/model && \
-    . /opt/venv/bin/activate && \
-    python download_model.py
+  . /opt/venv/bin/activate && \
+  python download_model.py
 
 # Production stage - 최종 경량 이미지
-FROM python:3.12-slim
+FROM public.ecr.aws/lambda/python:3.12
 
 # 시스템 환경 변수
 ENV PYTHONUNBUFFERED=1
@@ -44,10 +45,10 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PATH="/opt/ml/code:/opt/venv/bin:${PATH}"
 
 # 런타임 시스템 종속성만 설치
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+RUN dnf update -y && dnf install -y \
+  mesa-libGL \
+  glib2 \
+  && dnf clean all && rm -rf /var/cache/dnf /tmp/* /var/tmp/*
 
 # 코드 및 모델 디렉토리 생성
 WORKDIR /opt/ml/code
