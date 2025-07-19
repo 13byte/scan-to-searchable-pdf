@@ -1,14 +1,18 @@
 import boto3
 import os
+import sys
 import json
+import boto3
 import logging
 import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 from botocore.config import Config
 from aws_lambda_powertools import Logger
-import sys
+
+# Lambda 레이어 경로 설정
 sys.path.append('/opt/python')
+
 from common.state_manager import get_state_manager, StateUpdateError
 from common.sagemaker_client import get_sagemaker_client, SageMakerInferenceError
 

@@ -1,6 +1,7 @@
 import json
 import boto3
 import os
+import sys
 import logging
 import math
 import statistics
@@ -11,9 +12,11 @@ from google.oauth2 import service_account
 from aws_lambda_powertools import Logger, Tracer
 from aws_lambda_powertools.utilities.typing import LambdaContext
 import backoff
-from secrets_cache import get_cached_secret, SecretsRetrievalError, SecretsValidationError
-import sys
+
+# Lambda 레이어 경로 설정
 sys.path.append('/opt/python')
+
+from common.secrets_cache import get_cached_secret, SecretsRetrievalError, SecretsValidationError
 from common.state_manager import get_state_manager, StateUpdateError
 
 import time

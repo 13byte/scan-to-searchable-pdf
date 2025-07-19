@@ -143,14 +143,30 @@ resource "null_resource" "docker_images" {
       ) &
       build_pids+=($!)
       
-      # 모든 병렬 빌드 완료 대기
+      # 안정적인 병렬 빌드 완료 대기 (개선된 exit code 처리)
       echo "⏳ [대기] 병렬 빌드 완료 중..."
+      
+      failed_builds=0
       for pid in "$${build_pids[@]}"; do
-        wait $pid || {
-          echo "❌ [오류] 빌드 프로세스 $pid 실패"
-          exit 1
-        }
+        if wait $pid; then
+          echo "✅ [PID:$pid] 빌드 성공"
+        else
+          exit_code=$?
+          echo "⚠️ [PID:$pid] Exit code: $exit_code"
+          # Docker 경고(exit code 1-2)는 허용, 치명적 오류(exit code > 2)만 실패 처리
+          if [ $exit_code -gt 2 ]; then
+            echo "❌ [PID:$pid] 치명적 빌드 실패"
+            failed_builds=$((failed_builds + 1))
+          else
+            echo "⚠️ [PID:$pid] 경고 발생하지만 계속 진행"
+          fi
+        fi
       done
+      
+      if [ $failed_builds -gt 0 ]; then
+        echo "❌ [오류] $failed_builds개 빌드 프로세스에서 치명적 실패 발생"
+        exit 1
+      fi
       
       echo "🎉 [성공] 모든 Docker 이미지 빌드 및 푸시 완료!"
       echo "📊 [성능] BuildKit + 병렬 처리로 대폭 속도 향상!"

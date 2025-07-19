@@ -1,17 +1,19 @@
 import json
 import boto3
 import os
+import sys
 import logging
 from datetime import datetime
 from google.cloud import vision
 from google.oauth2 import service_account
 from aws_lambda_powertools import Logger
-from secrets_cache import get_cached_secret, SecretsRetrievalError, SecretsValidationError
-import sys
-sys.path.append('/opt/python')
-from common.state_manager import get_state_manager, StateUpdateError
-
 import time
+
+# Lambda 레이어 경로 설정
+sys.path.append('/opt/python')
+
+from common.secrets_cache import get_cached_secret, SecretsRetrievalError, SecretsValidationError
+from common.state_manager import get_state_manager, StateUpdateError
 
 logger = Logger(service="process-ocr")
 
