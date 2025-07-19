@@ -67,13 +67,17 @@ resource "null_resource" "docker_images" {
       # Lambda 함수들 병렬 빌드 (ARM64) - AWS Support 권장사항 적용
       echo "⚡ [병렬] detect-skew Lambda 빌드 중..."
       (
+        set -e
+        echo "[PID:$$] detect-skew 빌드 시작"
         docker buildx build --platform linux/arm64 \
           --provenance=false \
           --output type=docker \
           -t ${aws_ecr_repository.detect_skew_lambda.repository_url}:latest \
-          -f docker/detect-skew/Dockerfile . && \
-        docker push ${aws_ecr_repository.detect_skew_lambda.repository_url}:latest
-        echo "✅ detect-skew 완료"
+          -f docker/detect-skew/Dockerfile . || exit 3
+        
+        echo "[PID:$$] detect-skew ECR 푸시 시작"  
+        docker push ${aws_ecr_repository.detect_skew_lambda.repository_url}:latest || exit 3
+        echo "✅ detect-skew 완료 (PID:$$)"
       ) &
       build_pids+=($!)
       

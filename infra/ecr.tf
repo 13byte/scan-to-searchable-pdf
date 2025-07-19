@@ -27,6 +27,18 @@ resource "aws_ecr_repository_policy" "sagemaker_realesrgan_policy" {
     Version = "2012-10-17",
     Statement = [
       {
+        Sid    = "AllowSageMakerRoleAccess",
+        Effect = "Allow",
+        Principal = {
+          AWS = aws_iam_role.sagemaker_role.arn # 구체적인 IAM 역할 ARN 지정
+        },
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage"
+        ]
+      },
+      {
         Sid    = "AllowSageMakerServiceAccess",
         Effect = "Allow",
         Principal = {
@@ -36,7 +48,12 @@ resource "aws_ecr_repository_policy" "sagemaker_realesrgan_policy" {
           "ecr:BatchCheckLayerAvailability",
           "ecr:GetDownloadUrlForLayer",
           "ecr:BatchGetImage"
-        ]
+        ],
+        Condition = {
+          StringEquals = {
+            "aws:SourceArn" = "arn:aws:sagemaker:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:*"
+          }
+        }
       }
     ]
   })
@@ -95,10 +112,10 @@ resource "aws_ecr_lifecycle_policy" "default_policy" {
         rulePriority = 1,
         description  = "최근 3개의 태그된 이미지 ��지",
         selection = {
-          tagStatus     = "tagged",
+          tagStatus      = "tagged",
           tagPatternList = ["*"], # 모든 태그된 이미지에 적용
-          countType     = "imageCountMoreThan",
-          countNumber   = 3
+          countType      = "imageCountMoreThan",
+          countNumber    = 3
         },
         action = { type = "expire" }
       },
@@ -116,3 +133,4 @@ resource "aws_ecr_lifecycle_policy" "default_policy" {
     ]
   })
 }
+
