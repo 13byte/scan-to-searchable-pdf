@@ -174,7 +174,7 @@ resource "null_resource" "docker_images" {
       echo "⏳ [대기] 병렬 빌드 완료 중..."
       
       failed_builds=0
-      for pid in "${build_pids[@]}"; do
+      for pid in "$${build_pids[@]}"; do
         if wait $pid; then
           echo "✅ [PID:$pid] 빌드 성공"
         else

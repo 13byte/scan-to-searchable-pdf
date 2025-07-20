@@ -125,7 +125,7 @@ resource "aws_iam_policy" "base_policy" {
           "sqs:ReceiveMessage",
           "sqs:DeleteMessage",
           "sqs:GetQueueAttributes",
-          "sqs:GetQueueUrl" # 추가
+          "sqs:GetQueueUrl"
         ],
         Resource = "*"
       }
@@ -152,46 +152,33 @@ resource "aws_iam_role" "sagemaker_role" {
       }
     ]
   })
-}
 
-resource "aws_iam_role_policy_attachment" "sagemaker_attach_base" {
-  role       = aws_iam_role.sagemaker_role.name
-  policy_arn = aws_iam_policy.base_policy.arn
-}
-
-resource "aws_iam_policy" "sagemaker_ecr_policy" {
-  name        = "${var.project_name}-sagemaker-ecr-policy"
-  description = "SageMaker가 ECR 리포지토리에 접근하기 위한 정책"
-
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "ecr:GetAuthorizationToken"
-        ],
-        Resource = "*"
-      },
-      {
-        Effect = "Allow",
-        Action = [
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage"
-        ],
-        Resource = [
-          aws_ecr_repository.sagemaker_realesrgan.arn,
-          "arn:aws:ecr:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:repository/${var.project_name}/*"
-        ]
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "sagemaker_attach_ecr_custom" {
-  role       = aws_iam_role.sagemaker_role.name
-  policy_arn = aws_iam_policy.sagemaker_ecr_policy.arn
+  inline_policy {
+    name = "sagemaker_execution_policy"
+    policy = jsonencode({
+      Version = "2012-10-17",
+      Statement = [
+        {
+          Effect = "Allow",
+          Action = [
+            "sagemaker:*",
+            "s3:GetObject",
+            "s3:PutObject",
+            "s3:ListBucket",
+            "logs:CreateLogGroup",
+            "logs:CreateLogStream", 
+            "logs:PutLogEvents",
+            "cloudwatch:PutMetricData",
+            "ecr:GetAuthorizationToken",
+            "ecr:BatchCheckLayerAvailability",
+            "ecr:GetDownloadUrlForLayer",
+            "ecr:BatchGetImage"
+          ],
+          Resource = "*"
+        }
+      ]
+    })
+  }
 }
 
 resource "aws_iam_role" "step_functions_role" {

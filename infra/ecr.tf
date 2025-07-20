@@ -19,18 +19,14 @@ resource "aws_ecr_repository" "sagemaker_realesrgan" {
 # SageMaker가 ECR 이미지에 접근할 수 있도록 리포지토리 정책 설정
 resource "aws_ecr_repository_policy" "sagemaker_realesrgan_policy" {
   repository = aws_ecr_repository.sagemaker_realesrgan.name
-
-  # IAM 역할 생성 후에 정책 적용
-  depends_on = [aws_iam_role.sagemaker_role]
-
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
       {
-        Sid    = "AllowSageMakerRoleAccess",
+        Sid    = "AllowSageMakerExecutionRole",
         Effect = "Allow",
         Principal = {
-          AWS = aws_iam_role.sagemaker_role.arn # 구체적인 IAM 역할 ARN 지정
+          AWS = aws_iam_role.sagemaker_role.arn
         },
         Action = [
           "ecr:BatchCheckLayerAvailability",
@@ -39,24 +35,19 @@ resource "aws_ecr_repository_policy" "sagemaker_realesrgan_policy" {
         ]
       },
       {
-        Sid    = "AllowSageMakerServiceAccess",
+        Sid    = "AllowAccountAccess",
         Effect = "Allow",
         Principal = {
-          Service = "sagemaker.amazonaws.com"
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
         },
         Action = [
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage"
-        ],
-        Condition = {
-          StringEquals = {
-            "aws:SourceArn" = "arn:aws:sagemaker:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:*"
-          }
-        }
+          "ecr:*"
+        ]
       }
     ]
   })
+  
+  depends_on = [aws_iam_role.sagemaker_role]
 }
 
 resource "aws_ecr_repository" "detect_skew_lambda" {

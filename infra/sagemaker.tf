@@ -18,9 +18,6 @@ resource "aws_sagemaker_model" "realesrgan" {
   }
 
   depends_on = [
-    null_resource.docker_images,
-    
-    aws_iam_role.sagemaker_role,
     aws_ecr_repository_policy.sagemaker_realesrgan_policy
   ]
 }
@@ -34,8 +31,8 @@ resource "aws_sagemaker_endpoint_configuration" "realesrgan" {
 
     # 서버리스 구성으로 전환 - 24/7 운영 비용 74% 절감
     serverless_config {
-      max_concurrency   = 10   # 동시 요청 수 감소로 안정성 확보
-      memory_size_in_mb = 6144 # 메모리 증가로 Real-ESRGAN 안정성 향상
+      max_concurrency   = 3    # 동시 요청 수 감소로 안정성 확보
+      memory_size_in_mb = 6144 # 메모리 증가로 모델 로딩 안정성 향상
     }
   }
 

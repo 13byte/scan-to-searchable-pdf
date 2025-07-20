@@ -32,7 +32,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # 애플리케이션 코드 복사 (자주 변경되는 레이어를 마지막에)
 COPY docker/detect-skew/main.py ${LAMBDA_TASK_ROOT}/lambda_function.py
-COPY workers/2_image_processing/detect_skew/secrets_cache.py ${LAMBDA_TASK_ROOT}/
+COPY workers/common/secrets_cache.py ${LAMBDA_TASK_ROOT}/
 
 # Lambda 핸들러 설정
 CMD ["lambda_function.lambda_handler"]

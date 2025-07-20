@@ -31,7 +31,7 @@ COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # 공통 모듈 복사
-COPY workers/2_image_processing/detect_skew/secrets_cache.py ${LAMBDA_TASK_ROOT}/
+COPY workers/common/secrets_cache.py ${LAMBDA_TASK_ROOT}/
 
 # 애플리케이션 코드 복사 (자주 변경되는 레이어를 마지막에)
 COPY docker/process-ocr/main.py ${LAMBDA_TASK_ROOT}/lambda_function.py
