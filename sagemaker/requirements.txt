@@ -5,16 +5,19 @@ Pillow>=10.3.0
 numpy<2.0
 opencv-python-headless>=4.9.0
 
-# PyTorch CPU 버전 (서버리스 환경 최적화)
-torch==2.3.1+cpu --index-url https://download.pytorch.org/whl/cpu
-torchvision==0.18.1+cpu --index-url https://download.pytorch.org/whl/cpu
+# PyTorch GPU 버전
+# ml.g6e (NVIDIA L4 GPU) 및 Dockerfile의 CUDA 버전(12.3.2)과의 최적 호환성을 확인하는 것이 좋습니다.
+# 일반적으로는 호환되지만, 특정 GPU 아키텍처에 최적화된 빌드가 있을 수 있습니다.
+torch==2.3.1
+torchvision==0.18.1
 
 # FastAPI 서버
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
 python-multipart>=0.0.9
 
-# Real-ESRGAN 관련 (GitHub 직접 설치로 의존성 충돌 해결)
+# Real-ESRGAN 관련
+# GitHub에서 직접 설치하는 경우, 재현 가능한 빌드를 위해 특정 커밋 해시나 릴리스 태그를 명시하는 것이 좋습니다.
 basicsr @ git+https://github.com/xinntao/BasicSR.git
 realesrgan @ git+https://github.com/xinntao/Real-ESRGAN.git
 numba>=0.59.0
