@@ -41,13 +41,13 @@ variable "output_bucket_name" {
 }
 
 variable "max_batch_size" {
-  description = "동적 배치 크기의 최대값."
+  description = "동적 배치 크기의 최대값 (L40S 48GB VRAM 최적화)."
   type        = number
-  default     = 50
+  default     = 80
 }
 
 variable "min_batch_size" {
-  description = "동적 배치 크기의 최소값."
+  description = "동적 배치 크기의 최소값 (L40S 48GB VRAM 최적화)."
   type        = number
-  default     = 5
+  default     = 10
 }

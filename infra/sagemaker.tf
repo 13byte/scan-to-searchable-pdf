@@ -18,7 +18,8 @@ resource "aws_sagemaker_model" "realesrgan" {
   }
 
   depends_on = [
-    aws_ecr_repository_policy.sagemaker_realesrgan_policy
+    aws_ecr_repository_policy.sagemaker_realesrgan_policy,
+    null_resource.docker_images
   ]
 }
 
@@ -29,7 +30,7 @@ resource "aws_sagemaker_endpoint_configuration" "realesrgan" {
     variant_name           = "AllTraffic"
     model_name            = aws_sagemaker_model.realesrgan.name
     initial_instance_count = 1
-    instance_type         = "ml.g4dn.xlarge"  # GPU 인스턴스로 성능 향상
+    instance_type         = "ml.g6.2xlarge"  # NVIDIA L4 Tensor Core GPU, 8 vCPUs, 32 GiB
     initial_variant_weight = 1
   }
 
@@ -53,7 +54,7 @@ resource "aws_sagemaker_endpoint" "realesrgan" {
   depends_on = [aws_sagemaker_endpoint_configuration.realesrgan]
 }
 
-# Auto Scaling 설정으로 비용 최적화
+# Auto Scaling 설정으로 비용 최적화 (ml.g6.2xlarge 최적화)
 resource "aws_appautoscaling_target" "sagemaker_target" {
   max_capacity       = 3  # 최대 3개 인스턴스
   min_capacity       = 0  # 비사용시 0개로 스케일다운
@@ -75,7 +76,7 @@ resource "aws_appautoscaling_policy" "sagemaker_scaling_policy" {
     predefined_metric_specification {
       predefined_metric_type = "SageMakerVariantInvocationsPerInstance"
     }
-    target_value       = 50.0  # 인스턴스당 50 요청/분 목표
+    target_value       = 75.0  # ml.g6.2xlarge 최적화: 인스턴스당 75 요청/분 목표
     scale_in_cooldown  = 300   # 스케일 인 대기시간 5분
     scale_out_cooldown = 300   # 스케일 아웃 대기시간 5분
   }

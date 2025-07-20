@@ -43,6 +43,9 @@ resource "null_resource" "docker_images" {
       aws_ecr_repository.pdf_generator_lambda.repository_url,
       aws_ecr_repository.orchestrator_lambda.repository_url
     ])
+    
+    # 수동 재빌드 트리거 (버전 업데이트 시에만 변경)
+    rebuild_version = "v1.0.0"
   }
 
   # 최적화된 이미지 빌드 및 푸시 실행
@@ -231,6 +234,13 @@ data "aws_ecr_image" "pdf_generator_image" {
 data "aws_ecr_image" "orchestrator_image" {
   depends_on      = [null_resource.docker_images]
   repository_name = aws_ecr_repository.orchestrator_lambda.name
+  image_tag       = "latest"
+}
+
+# SageMaker Real-ESRGAN 이미지 검증
+data "aws_ecr_image" "sagemaker_realesrgan_image" {
+  depends_on      = [null_resource.docker_images]
+  repository_name = aws_ecr_repository.sagemaker_realesrgan.name
   image_tag       = "latest"
 }
 
